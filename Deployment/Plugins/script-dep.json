@@ -1,0 +1,5 @@
+{
+  "name": "script-dep",
+  "description": "Execute dependency script during deployment.",
+  "script": "script-dep.sh"
+}

@@ -1,10 +1,14 @@
 [Desktop Entry]
 Name=Dia-X11
-Comment=Dia forced to run under X11 backend
-Exec=env GDK_BACKEND=x11 XDG_SESSION_TYPE=x11 dia
+Comment=Dia with explicit GTK2 Adwaita theme
+Exec=env GTK2_RC_FILES=/usr/share/themes/Adwaita/gtk-2.0/gtkrc GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 dia
 Icon=org.gnome.Dia
 Terminal=false
 Type=Application
-Categories=Graphics;
-StartupNotify=true
+Categories=Graphics;FlowChart;
+StartupNotify=false
 #<--[~/.local/share/applications]-->#
+
+#If this one does not launch correctly - check the dependencies
+#You can also execute:
+#paru -Syyu gtk-engine-murrine dia-git xorg

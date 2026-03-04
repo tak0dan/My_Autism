@@ -1,3 +1,20 @@
+#!/usr/bin/env bash
+
+is_derivation() {
+  nix eval --impure --raw --expr "
+    let
+      pkgs = import <nixpkgs> {};
+      val = builtins.tryEval pkgs.${1};
+    in
+      if val.success then
+        if builtins.isAttrs val.value && (val.value.type or null) == \"derivation\"
+        then \"true\"
+        else \"false\"
+      else
+        \"false\"
+  " 2>/dev/null | grep -q true
+}
+
 generate_modules() {
   echo "Generating modules from lock..."
 
@@ -5,8 +22,9 @@ generate_modules() {
 
   for pkg in "${packages[@]}"; do
 
+    # Validate package exists AND is derivation
     if ! is_derivation "$pkg"; then
-      echo "Skipping non-derivation: $pkg"
+      echo "Skipping non-package: $pkg"
       continue
     fi
 
@@ -19,9 +37,13 @@ generate_modules() {
     fi
 
     cat > "$target" <<EOF
-{ pkgs }:
+{ config, pkgs, ... }:
 
-pkgs.$pkg
+{
+  environment.systemPackages = with pkgs; [
+    $pkg
+  ];
+}
 
 $NIXORCIST_MARKER
 # NIXORCIST-ATTRPATH: $pkg

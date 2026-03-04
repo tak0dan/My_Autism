@@ -5,13 +5,18 @@ regenerate_hub() {
 
   echo "Regenerating hub..."
 
+  mkdir -p "$ROOT/generated"
+
   {
     echo "{ config, pkgs, ... }:"
     echo "{"
     echo "  imports = ["
+
     for f in "$MODULES_DIR"/*.nix; do
+      [ -e "$f" ] || continue
       echo "    ./.modules/$(basename "$f")"
     done
+
     echo "  ];"
     echo "}"
   } > "$HUB"

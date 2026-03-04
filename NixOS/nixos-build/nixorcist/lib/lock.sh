@@ -38,18 +38,56 @@ run_rebuild() {
 }
 
 add_packages() {
-  mapfile -t current < <(read_lock_entries)
-  mapfile -t full_list < <(list_available_packages)
+  ensure_index
 
-  selected=$(printf '%s\n' "${full_list[@]}" | \
-    fzf --multi --prompt="PACKAGES> ")
+  while true; do
+    pkg=$(cut -d'|' -f1 "$(get_index_file)" | fzf \
+      --height=80% \
+      --prompt="Select package > " \
+      --preview "grep '^{}|' $(get_index_file) | cut -d'|' -f2" \
+      --preview-window=down:3:wrap)
 
-  [[ -z "$selected" ]] && return
+    [[ -z "$pkg" ]] && break
 
-  printf '%s\n' $selected | sort -u > "$LOCK_FILE"
-  echo "$BUILT_MARKER" >> "$LOCK_FILE"
+    if is_attrset "$pkg"; then
+      echo "Namespace detected: $pkg"
+
+      mapfile -t variants < <(
+        list_attrset_children "$pkg" | fzf \
+          --multi \
+          --header="TAB to select multiple packages" \
+          --prompt="Select $pkg variants > "
+      )
+
+      [[ ${#variants[@]} -eq 0 ]] && continue
+
+      for variant in "${variants[@]}"; do
+        resolved="$pkg.$variant"
+
+        if grep -qx "$resolved" "$LOCK_FILE"; then
+          echo "Already present: $resolved"
+        else
+          echo "$resolved" >> "$LOCK_FILE"
+          echo "Added: $resolved"
+        fi
+      done
+
+      continue
+    fi
+
+    if grep -qx "$pkg" "$LOCK_FILE"; then
+      echo "Already present: $pkg"
+    else
+      echo "$pkg" >> "$LOCK_FILE"
+      echo "Added: $pkg"
+    fi
+  done
+
   echo "Lock updated."
 }
+
+
+
 
 remove_packages() {
   mapfile -t current < <(read_lock_entries)
@@ -180,15 +218,56 @@ handle_missing_package() {
 
   case "${answer,,}" in
     ""|"y")
-      lock_ref+=("${matches[0]}")
+      selected="${matches[0]}"
       ;;
     c)
       selected=$(printf '%s\n' "${matches[@]}" | \
         fzf --prompt="Choose rename> ")
-      [[ -n "$selected" ]] && lock_ref+=("$selected")
       ;;
-    n|*)
+    *)
       echo "  skipped."
+      return
       ;;
   esac
+
+  [[ -z "$selected" ]] && return
+
+  # -------- NEW LOGIC --------
+
+  if is_derivation "$selected"; then
+    lock_ref+=("$selected")
+    echo "✓ resolved: $selected"
+    return
+  fi
+
+  if is_attrset "$selected"; then
+    echo "  Namespace detected: $selected"
+
+    mapfile -t variants < <(
+      list_attrset_children "$selected" | fzf \
+        --multi \
+        --header="TAB to select multiple packages" \
+        --prompt="Select $selected variants > "
+    )
+
+    [[ ${#variants[@]} -eq 0 ]] && return
+
+    for variant in "${variants[@]}"; do
+      resolved="$selected.$variant"
+
+      if is_derivation "$resolved"; then
+        lock_ref+=("$resolved")
+        echo "✓ resolved: $resolved"
+      else
+        echo "  Skipping non-package: $resolved"
+      fi
+    done
+
+    return
+  fi
+
+  echo "  Not a valid package. Skipping."
 }
+
+
+

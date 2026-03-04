@@ -22,7 +22,7 @@
 #    ./ZaneyOS/zaneyos/default.nix
     ./modules/environment.nix
     ./modules/zsh.nix
-#    ./nixorcist/generated/all-packages.nix   <---This is the correct import, but yet not working good enough
+    ./nixorcist/generated/all-packages.nix  # <---This is the correct import, but yet not working good enough
   ];
 
   # ────────────── GRUB Theming ──────────────

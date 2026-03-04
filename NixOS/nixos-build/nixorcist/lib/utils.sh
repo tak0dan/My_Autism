@@ -1,5 +1,34 @@
 #!/usr/bin/env bash
 
+
+get_index_file() {
+  echo "$ROOT/cache/nixpkgs-index.txt"
+}
+
+ensure_index() {
+
+  local index
+  index=$(get_index_file)
+
+  if [[ ! -f "$index" ]]; then
+    build_nix_index
+  fi
+}
+
+get_pkg_description() {
+  nix eval --impure --raw --expr "
+    let
+      pkgs = import <nixpkgs> {};
+      val = builtins.tryEval pkgs.${1};
+    in
+      if val.success && builtins.isAttrs val.value
+      then
+        (val.value.meta.description or \"No description\")
+      else
+        \"Not a package\"
+  " 2>/dev/null
+}
+
 list_available_packages() {
   nix eval --impure --raw --expr '
     let pkgs = import <nixpkgs> {};
@@ -22,12 +51,31 @@ purge_all_modules() {
 # --- package validation ---
 
 is_derivation() {
-  local pkg="$1"
+  nix eval --impure --expr "
+    let
+      pkgs = import <nixpkgs> {};
+      val = pkgs.${1};
+    in
+      builtins.isAttrs val && (val.type or null) == \"derivation\"
+  " 2>/dev/null | grep -q true
+}
 
+is_attrset() {
+  nix eval --impure --expr "
+    let
+      pkgs = import <nixpkgs> {};
+      val = builtins.tryEval pkgs.${1};
+    in
+      val.success && builtins.isAttrs val.value &&
+      (val.value.type or null) != \"derivation\"
+  " 2>/dev/null | grep -q true
+}
+
+list_attrset_children() {
   nix eval --impure --raw --expr "
-    let pkgs = import <nixpkgs> {};
-    in if pkgs ? \"$pkg\" && pkgs.$pkg ? type
-       then pkgs.$pkg.type
-       else \"invalid\"
-  " 2>/dev/null | grep -q derivation
+    let
+      pkgs = import <nixpkgs> {};
+    in
+      builtins.concatStringsSep \"\n\" (builtins.attrNames pkgs.${1})
+  " 2>/dev/null
 }

@@ -9,7 +9,7 @@ source "$ROOT/lib/dirs.sh"
 prepare_dirs
 
 # Load rest
-for lib in lock gen hub rebuild utils; do
+for lib in lock gen hub rebuild utils index; do
   source "$ROOT/lib/$lib.sh"
 done
 

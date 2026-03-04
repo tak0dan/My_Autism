@@ -7,6 +7,7 @@ with pkgs; [
   grim
   nwg-displays
   slurp
+  pkgs.hyprland-qt-support
   wlogout
   wl-clipboard
   hyprlock

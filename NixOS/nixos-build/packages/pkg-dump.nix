@@ -4,6 +4,7 @@ with pkgs; [
   firefox
   htop
   bat
+  socat
   bottom
   eza
   fzf

@@ -195,7 +195,7 @@ The Hyprland module is designed specifically to support the configuration from:
 ```
 [https://github.com/LinuxBeginnings/Hyprland-Dots](https://github.com/LinuxBeginnings/Hyprland-Dots)
 
-```
+
 
 However, it **does not rely on the flake** provided by that project.
 

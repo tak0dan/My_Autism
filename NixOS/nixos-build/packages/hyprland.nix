@@ -23,7 +23,6 @@ with pkgs; [
   swww
   file
   wallust
-  neofetch
   wl-clipboard
   hyprlock
   rofi
@@ -34,6 +33,15 @@ with pkgs; [
   mpvpaper
   procps
   libnotify
+  pkgs.thunar
+  alacritty
+  kitty
+  waybar
+  hyprlock
+  hyprpaper
+  rofi
+  wofi
+  eww
 
 
 

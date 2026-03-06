@@ -14,8 +14,13 @@ eclipses.eclipse-platform
 eclipses.eclipse-rcp
 eclipses.eclipse-sdk
 flatpak
+gtk-pipe-viewer
 krita
 nano
+nodejs
+pnpm
+python
+python3
 steam
 swww
 wallust

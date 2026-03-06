@@ -17,8 +17,12 @@
     ./.modules/eclipses.eclipse-rcp.nix
     ./.modules/eclipses.eclipse-sdk.nix
     ./.modules/flatpak.nix
+    ./.modules/gtk-pipe-viewer.nix
     ./.modules/krita.nix
     ./.modules/nano.nix
+    ./.modules/nodejs.nix
+    ./.modules/pnpm.nix
+    ./.modules/python3.nix
     ./.modules/steam.nix
     ./.modules/swww.nix
     ./.modules/wallust.nix

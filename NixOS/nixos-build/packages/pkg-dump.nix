@@ -16,7 +16,6 @@ with pkgs; [
   swww
   file
   wallust
-  neofetch
   steam
   vscode
   vscodium

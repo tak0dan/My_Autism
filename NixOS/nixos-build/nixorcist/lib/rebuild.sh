@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
 run_rebuild() {
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  ROOT_DIR="$(realpath "$SCRIPT_DIR/../..")"
+
   echo "→ Creating staging snapshot"
 
   rm -rf /etc/nixos/.staging
@@ -17,7 +20,7 @@ run_rebuild() {
   echo "→ Build successful"
   echo "→ Promoting staging to live config"
 
-  nixos-rebuild switch
+  "$ROOT_DIR/scripts/nix-rebuild-smart.sh"
 
   echo "→ Done"
 }

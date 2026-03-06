@@ -24,9 +24,9 @@ The result is a configuration that can scale without becoming chaotic.
 ---
 
 # Repository Structure
-
+```
 . ├── assets │   └── login.png │ ├── configuration.nix │ ├── modules │   ├── all-packages.nix │   ├── audio.nix │   ├── bootloader.nix │   ├── environment.nix │   ├── grub-theme.nix │   ├── kernel-params.nix │   ├── kernel-params-nvidia.nix │   ├── locale.nix │   ├── networking.nix │   ├── nixvim.nix │   ├── quickshell.nix │   ├── sddm.nix │   ├── users.nix │   ├── window-managers.nix │   └── zsh.nix │ ├── packages │   ├── all-packages.nix │   ├── communication.nix │   ├── core.nix │   ├── development.nix │   ├── eclipse.nix │   ├── games.nix │   ├── hyprland.nix │   ├── kde.nix │   ├── pkg-dump.nix │   ├── simplex-chat.nix │   ├── waybar-weather.nix │   ├── window-managers.nix │   └── zsh.nix │ ├── nixorcist │   ├── generated │   ├── lib │   ├── modules │   ├── lock │   └── nixorcist.sh │ └── scripts └── nix-rebuild-smart.sh
-
+```
 Some directories that previously existed (`ZaneyOS`, `/external`) were intentionally removed as they were no longer needed for the configuration.
 
 ---
@@ -129,23 +129,24 @@ This avoids tight coupling to an external flake.
 To replicate the intended Hyprland experience:
 
 ## 1. Clone the original dotfiles
-
+```
 git clone https://github.com/LinuxBeginnings/Hyprland-Dots
+```
 
 ## 2. Replace certain configs
 
 Override parts of the cloned configuration using the files from:
-
+```
 https://github.com/tak0dan/WtfOS/tree/main/Configs/Hyprland%2Blinux_beginnings
-
+```
 Specifically:
 
 waybar btop wallust
 
 Example:
-
+```
 cp -r /path/to/cloned/configs/* ~/.config/
-
+```
 These overrides adapt the original dotfiles to work perfectly with this NixOS configuration.
 
 Without these overrides some visual elements or scripts may behave differently.
@@ -183,18 +184,22 @@ lock file ↓ generated modules ↓ hub module ↓ system rebuild
 
 Instead of editing package lists manually.
 
-Basic usage:
+Basic usage(It might need sudo) :
 
+```
 nixorcist select
+```
 
 Then:
-
-nixorcist gen nixorcist hub nixorcist rebuild
-
+``
+nixorcist gen 
+nixorcist hub 
+nixorcist rebuild
+```
 Or run everything:
-
+```
 nixorcist all
-
+```
 This system generates Nix modules automatically from the lock file.
 
 ---
@@ -235,9 +240,9 @@ nixorcist hub
 nixorcist rebuild
 
 Or simply:
-
+```
 nixorcist all
-
+```
 ---
 
 # Goals of this Configuration

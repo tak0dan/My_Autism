@@ -1,4 +1,8 @@
-```markdown
+[⚠️⚠️⚠️] DO NOT COPY AND PASTE IT BLINDLY, CREATE BACKUP FIRST[⚠️⚠️⚠️] 
+
+#Got a backup already? Good :) 
+#Allow me to introduce:
+
 # WtfOS — Modular NixOS Configuration
 
 This repository contains a **modular NixOS configuration** designed to be readable, maintainable, and easy to expand without turning `configuration.nix` into a giant unreadable mess.

@@ -1,19 +1,18 @@
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 # =============================================================================
 #                         Personal Modular NixOS Configuration
 # =============================================================================
-#
-# This file serves as the central orchestration layer of the system.
-# Most functionality is implemented inside modular files located in:
-#
-#   ./modules/
-#
-# The goal is to keep this file readable while delegating complexity
-# to dedicated modules.
-#
-# =============================================================================
 
+let
+
+  # ---------------------------------------------------------------------------
+  # Feature Toggles
+  # ---------------------------------------------------------------------------
+
+  systemUwUfied = false;
+
+in
 {
 
   # ===========================================================================
@@ -66,9 +65,6 @@
     # Shell / Environment
     # -------------------------------------------------------------------------
 
-#   ./external/home-manager/nixos
-#   ./ZaneyOS/zaneyos/default.nix
-
     ./modules/environment.nix
     ./modules/zsh.nix
 
@@ -79,8 +75,17 @@
 
     ./nixorcist/generated/all-packages.nix
 
-  ];
+  ]
 
+  ++ lib.optionals systemUwUfied [
+
+    # -------------------------------------------------------------------------
+    # UwU Mode
+    # -------------------------------------------------------------------------
+
+    ./modules/uwu/nixowos.nix
+
+  ];
 
 
   # ===========================================================================
@@ -101,17 +106,12 @@
   };
 
 
-
   # ===========================================================================
   #                            Graphics / Hardware
   # ===========================================================================
-  #
-  # Enables OpenGL stack and 32-bit compatibility required by many games
-  #
 
   hardware.graphics.enable = true;
   hardware.graphics.enable32Bit = true;
-
 
 
   # ===========================================================================
@@ -121,24 +121,16 @@
   services.pipewire.enable = true;
 
 
-
   # ===========================================================================
   #                    Desktop Environment / Window Managers
   # ===========================================================================
-  #
-  # Hyprland Wayland compositor
-  # KDE components used for integration (Qt apps, dialogs, etc.)
-  #
 
   programs.hyprland.enable = true;
 
   qt = {
-
     enable = true;
     platformTheme = "kde";
-
   };
-
 
 
   # ===========================================================================
@@ -151,16 +143,12 @@
 
     settings = {
 
-      # Disable direct root login over SSH
       PermitRootLogin = "no";
-
-      # Enable password login (consider disabling when using SSH keys)
       PasswordAuthentication = true;
 
     };
 
   };
-
 
 
   # ===========================================================================
@@ -170,17 +158,13 @@
   virtualisation.docker.enable = true;
 
 
-
   # ===========================================================================
   #                                   Gaming
   # ===========================================================================
 
   programs.steam.enable = true;
-
   programs.steam.gamescopeSession.enable = true;
-
   programs.gamemode.enable = true;
-
 
 
   # ===========================================================================
@@ -190,24 +174,20 @@
   nixpkgs.config.allowUnfree = true;
 
   nix.settings = {
-      experimental-features = [ "nix-command" "flakes" ];
 
-      download-buffer-size = 324217728;
-      http-connections = 50;
+    experimental-features = [ "nix-command" "flakes" ];
+
+    download-buffer-size = 324217728;
+    http-connections = 50;
+
   };
-
 
 
   # ===========================================================================
   #                                  Polkit
   # ===========================================================================
-  #
-  # Required for graphical authentication dialogs under Hyprland
-  #
 
   security.polkit.enable = true;
-
-
 
   systemd.user.services.polkit-kde-agent = {
 
@@ -228,18 +208,12 @@
   };
 
 
-
   # ===========================================================================
   #                          KDE Menu Compatibility Fix
   # ===========================================================================
-  #
-  # Ensures KDE menu entries function correctly when using KDE applications
-  # outside of a full Plasma desktop session.
-  #
 
   environment.etc."xdg/menus/applications.menu".source =
     "${pkgs.kdePackages.plasma-workspace}/etc/xdg/menus/plasma-applications.menu";
-
 
 
   # ===========================================================================
@@ -256,11 +230,6 @@
       pkgs.kdePackages.kio-admin
       pkgs.hyprland-qt-support
 
-
-      # -----------------------------------------------------------------------
-      # Nixorcist CLI entry point
-      # -----------------------------------------------------------------------
-
       (pkgs.writeShellScriptBin "nixorcist" ''
         exec /etc/nixos/nixorcist/nixorcist.sh "$@"
       '')
@@ -268,14 +237,9 @@
     ];
 
 
-
   # ===========================================================================
   #                              System State Version
   # ===========================================================================
-  #
-  # DO NOT change unless you know what you are doing.
-  # Controls compatibility defaults for NixOS services.
-  #
 
   system.stateVersion = "25.11";
 

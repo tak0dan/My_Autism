@@ -1,6 +1,11 @@
 { config, pkgs, ... }:
 {
   imports = [
+    ./.modules/adw-bluetooth.nix
+    ./.modules/blueman.nix
+    ./.modules/discover-overlay.nix
+    ./.modules/docker.nix
+    ./.modules/eclipse-mat.nix
     ./.modules/eclipses.eclipse-committers.nix
     ./.modules/eclipses.eclipse-cpp.nix
     ./.modules/eclipses.eclipse-dsl.nix
@@ -11,6 +16,8 @@
     ./.modules/eclipses.eclipse-platform.nix
     ./.modules/eclipses.eclipse-rcp.nix
     ./.modules/eclipses.eclipse-sdk.nix
+    ./.modules/flatpak.nix
+    ./.modules/krita.nix
     ./.modules/nano.nix
     ./.modules/steam.nix
     ./.modules/swww.nix

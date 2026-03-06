@@ -14,6 +14,7 @@ for lib in lock gen hub rebuild utils index; do
 done
 
 case "${1:-}" in
+
   select)
     select_packages
     ;;

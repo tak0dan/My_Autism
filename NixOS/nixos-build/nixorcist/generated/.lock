@@ -1,4 +1,8 @@
-eclipses
+adw-bluetooth
+blueman
+discover-overlay
+docker
+eclipse-mat
 eclipses.eclipse-committers
 eclipses.eclipse-cpp
 eclipses.eclipse-dsl
@@ -9,6 +13,8 @@ eclipses.eclipse-modeling
 eclipses.eclipse-platform
 eclipses.eclipse-rcp
 eclipses.eclipse-sdk
+flatpak
+krita
 nano
 steam
 swww

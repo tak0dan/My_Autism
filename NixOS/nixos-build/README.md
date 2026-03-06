@@ -229,7 +229,7 @@ Override parts of the cloned configuration using the files from:
 
 [https://github.com/tak0dan/WtfOS/tree/main/Configs/Hyprland%2Blinux_beginnings](https://github.com/tak0dan/WtfOS/tree/main/Configs/Hyprland%2Blinux_beginnings)
 
-```
+
 
 Specifically:
 

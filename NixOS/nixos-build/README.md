@@ -191,7 +191,7 @@ nixorcist select
 ```
 
 Then:
-``
+```
 nixorcist gen 
 nixorcist hub 
 nixorcist rebuild

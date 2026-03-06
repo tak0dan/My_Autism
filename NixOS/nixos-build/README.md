@@ -110,10 +110,9 @@ This duplication is **deliberate and harmless**.
 
 The Hyprland module is designed specifically to support the configuration from:
 
-https://github.com/LinuxBeginnings/Hyprland-Dots
+[https://github.com/LinuxBeginnings/Hyprland-Dots](https://github.com/LinuxBeginnings/Hyprland-Dots)
 
-However, it **does not rely on the flake** provided by that project.
-
+However, this configuration **does not rely on the flake** provided by that project.
 Instead:
 
 - the configuration was reworked
@@ -122,6 +121,19 @@ Instead:
 
 This avoids tight coupling to an external flake.
 
+So for the better experience I suggest to install it next way:
+
+It is not suggested to use the auto-installation script since it detects the distro and installs the dotfiles with flake.
+Instead do: 
+```
+git clone --depth=1 https://github.com/LinuxBeginnings/Hyprland-Dots.git -b development
+cd Hyprland-Dots
+```
+Copy them manually or use the copying script:
+```
+chmod +x copy.sh
+./copy.sh
+```
 ---
 
 # Achieving the "Zen Hyprland" Setup
@@ -136,7 +148,7 @@ git clone https://github.com/LinuxBeginnings/Hyprland-Dots
 ## 2. Replace certain configs
 
 Override parts of the cloned configuration using the files from:
-[This repo](https://github.com/tak0dan/WtfOS/tree/main/Configs/Hyprland%2Blinux_beginnings)
+[https://github.com/tak0dan/WtfOS/tree/main/Configs/Hyprland%2Blinux_beginnings](https://github.com/tak0dan/WtfOS/tree/main/Configs/Hyprland%2Blinux_beginnings)
 
 Specifically:
 

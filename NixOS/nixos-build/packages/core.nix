@@ -10,6 +10,10 @@ with pkgs; [
   wget
   htop
   vim
+  neovim
+  fastfetch
+  overskride
+  blueman
   tree
   efibootmgr
   btop

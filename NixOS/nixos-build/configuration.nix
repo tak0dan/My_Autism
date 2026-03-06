@@ -18,6 +18,7 @@
     ./modules/networking.nix
     ./modules/users.nix
     ./modules/audio.nix
+
 #   ./external/home-manager/nixos
 #   ./ZaneyOS/zaneyos/default.nix
     ./modules/environment.nix

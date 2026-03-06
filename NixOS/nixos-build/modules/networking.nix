@@ -1,6 +1,6 @@
 { config, pkgs, ... }:
 
 {
-  networking.hostName = "Tak_0";
+  networking.hostName = "Tak0_NixOS";
   networking.networkmanager.enable = true;
 }

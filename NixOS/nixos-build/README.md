@@ -192,7 +192,7 @@ This duplication is **deliberate and harmless**.
 The Hyprland module is designed specifically to support the configuration from:
 
 ```
-
+```
 [https://github.com/LinuxBeginnings/Hyprland-Dots](https://github.com/LinuxBeginnings/Hyprland-Dots)
 
 ```

@@ -1,7 +1,8 @@
 [⚠️⚠️⚠️] DO NOT COPY AND PASTE IT BLINDLY, CREATE BACKUP FIRST[⚠️⚠️⚠️] 
 
-#Got a backup already? Good :) 
-#Allow me to introduce:
+# Got a backup already? Good :) 
+
+# Allow me to introduce:
 
 # WtfOS — Modular NixOS Configuration
 

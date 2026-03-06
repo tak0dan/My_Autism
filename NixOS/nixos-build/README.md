@@ -136,7 +136,7 @@ git clone https://github.com/LinuxBeginnings/Hyprland-Dots
 ## 2. Replace certain configs
 
 Override parts of the cloned configuration using the files from:
-(This repo)[https://github.com/tak0dan/WtfOS/tree/main/Configs/Hyprland%2Blinux_beginnings]
+[This repo](https://github.com/tak0dan/WtfOS/tree/main/Configs/Hyprland%2Blinux_beginnings)
 
 Specifically:
 

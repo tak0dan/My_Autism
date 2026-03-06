@@ -238,7 +238,8 @@ Specifically:
 waybar
 btop
 wallust
-
+```
+cp -r /path/to/cloned/configs ~.configs/*
 ```
 
 These overrides adapt the original dotfiles to work perfectly with this NixOS configuration.

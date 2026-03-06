@@ -233,7 +233,7 @@ Override parts of the cloned configuration using the files from:
 
 Specifically:
 
-```
+
 
 waybar
 btop

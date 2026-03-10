@@ -1,0 +1,6 @@
+# Local machine-specific NixOS hardware config
+**/hardware-configuration
+**/hardware-configuration.nix
+
+# Temporary rebuild staging directories
+**/.staging/

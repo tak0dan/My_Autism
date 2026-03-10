@@ -1,9 +1,8 @@
-<<<<<<< HEAD
-[⚠️⚠️⚠️] DO NOT COPY AND PASTE IT BLINDLY, CREATE BACKUP FIRST[⚠️⚠️⚠️] 
+
+# [⚠️⚠️⚠️] DO NOT COPY AND PASTE IT BLINDLY, CREATE BACKUP FIRST[⚠️⚠️⚠️] 
 
 # Got a backup already? Good :) 
-
-# Allow me to introduce:
+ Allow me to introduce:
 
 
 

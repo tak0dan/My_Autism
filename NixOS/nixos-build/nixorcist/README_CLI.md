@@ -3,6 +3,21 @@
 ## Overview
 The CLI module provides visual interface components for nixorcist. It abstracts all user-facing output formatting, making the codebase more maintainable and enabling consistent UI across all commands.
 
+## Command Surface
+
+Current command routes in the main CLI include:
+
+- `import FILE` - file import with `+/-` mode switching
+- `install|add ARGS...` - argument wrapper routed through import with temporary file
+- `delete|uninstall|remove|selecte ARGS...` - delete wrapper routed through import with temporary file
+- `chant ARGS...` - mixed add/remove in one argument stream
+
+Parser behavior for `import` and wrappers:
+- default mode is install
+- `+` switches to install mode
+- `-` switches to remove mode
+- signs can be repeated and inline (`+f+g -vim +helix`)
+
 ## Location
 `lib/cli.sh`
 

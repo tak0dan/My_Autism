@@ -83,9 +83,10 @@ nixorcist/
 nixorcist help                 # Show help and command menu
 nixorcist transaction          # Interactive add/remove/preview
 nixorcist select               # Select packages to add
-nixorcist add                  # Alias for transaction
-nixorcist remove               # Alias for transaction
-nixorcist import FILE          # Import packages from file
+nixorcist import FILE          # Import packages (+/- switches supported)
+nixorcist install ARGS         # Arg import wrapper (alias: add)
+nixorcist delete ARGS          # Arg delete wrapper (aliases: remove/uninstall/selecte)
+nixorcist chant ARGS           # Mixed +/- add/remove in one run
 nixorcist gen                  # Generate modules from lock
 nixorcist hub                  # Regenerate import hub
 nixorcist rebuild              # Rebuild NixOS system
@@ -123,7 +124,23 @@ nixorcist transaction
 # Or import from file
 echo -e "firefox\ngit\nvim" > packages.txt
 nixorcist import packages.txt
+
+# Import supports inline mode switches
+echo "firefox +git -vim +helix" > mixed.txt
+nixorcist import mixed.txt
+
+# Argument wrappers
+nixorcist install a b,c,d
+nixorcist delete e f
+nixorcist chant a b,c,d -e f,+a +f+g h + l - l
 ```
+
+`import` and `chant` use the same parser semantics:
+- default mode is install
+- `+` switches to install mode
+- `-` switches to remove mode
+- switches can appear multiple times, including inline (example: `+f+g`)
+- removals are applied after additions (natural delete priority)
 
 ### Attribute Set Expansion
 

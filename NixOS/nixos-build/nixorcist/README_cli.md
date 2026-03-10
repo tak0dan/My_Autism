@@ -3,6 +3,21 @@
 ## Purpose
 Provides a beautiful command-line interface with ASCII logo, visual feedback functions, and consistent formatting for the nixorcist tool.
 
+## Command Surface
+
+The CLI now exposes these package entry commands:
+
+- `import FILE`: file-based import with `+/-` parser mode switching
+- `install|add ARGS...`: argument wrapper over import (temporary file route)
+- `delete|uninstall|remove|selecte ARGS...`: delete wrapper over import (temporary file route)
+- `chant ARGS...`: mixed add/remove parser flow in one command
+
+Parser notes:
+- default mode is install
+- `+` switches to install mode
+- `-` switches to remove mode
+- signs can appear multiple times and inline (example: `+f+g -vim +helix`)
+
 ## Structure
 
 ```

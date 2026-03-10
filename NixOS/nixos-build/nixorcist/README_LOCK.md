@@ -147,8 +147,8 @@ Legacy aliases that now call `run_transaction_cli()`.
 
 ## Package Import Functions
 
-### `import_from_file(file)`
-Reads packages from a file and applies them interactively.
+### `import_from_file(file, route)`
+Reads packages from a file and applies them interactively or in auto mode.
 
 **Parameters:**
 - `$1` - File path
@@ -158,12 +158,20 @@ Reads packages from a file and applies them interactively.
 - Comma-separated: `firefox,git,vim`
 - Space-separated: `firefox git vim`
 
+**Parser mode switches:**
+- default mode = install
+- `+` => install mode
+- `-` => delete mode
+- signs may appear inline and repeatedly (example: `+f+g -vim +helix`)
+
 **Workflow:**
 1. Parse and normalize input
-2. Stage entries as additions
+2. Stage entries according to parser mode (add/remove)
 3. Optionally review in transaction menu
-4. Apply transaction
-5. Optionally run full pipeline (`all`)
+4. Apply transaction (remove runs after add)
+5. Remove matching managed module files for removals
+6. Regenerate hub after removals
+7. Optionally run full pipeline (`all`)
 
 ---
 
@@ -174,6 +182,18 @@ Attempts to resolve unrecognized package names via fuzzy search.
 - `$1` - Unrecognized package name
 
 **Returns:** 0 if resolved, 1 if user skipped
+
+---
+
+### `install_from_args(args...)`
+Creates a temporary file from CLI args and routes to `import_from_file` in auto mode.
+
+### `delete_from_args(args...)`
+Creates a temporary file prefixed with `-` and routes to `import_from_file` in auto mode.
+
+### `chant_from_args(args...)`
+Creates a temporary file from raw CLI args and routes to `import_from_file` in auto mode.
+Supports mixed add/remove mode transitions with `+/-`.
 
 ---
 

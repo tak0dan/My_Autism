@@ -23,6 +23,33 @@ The result is a configuration that can scale without becoming chaotic.
 
 ---
 
+# Documentation Index
+
+Main and module documentation entry points:
+
+- [NixOS/nixos-build/modules/README.md](NixOS/nixos-build/modules/README.md) - Core system modules overview
+- [NixOS/nixos-build/nixorcist/README.md](NixOS/nixos-build/nixorcist/README.md) - Nixorcist main documentation
+
+Nixorcist technical documentation:
+
+- [NixOS/nixos-build/nixorcist/README_cli.md](NixOS/nixos-build/nixorcist/README_cli.md) - CLI interface
+- [NixOS/nixos-build/nixorcist/README_lock.md](NixOS/nixos-build/nixorcist/README_lock.md) - Lock and transaction engine
+- [NixOS/nixos-build/nixorcist/README_utils.md](NixOS/nixos-build/nixorcist/README_utils.md) - Utility and validation layer
+- [NixOS/nixos-build/nixorcist/README_gen.md](NixOS/nixos-build/nixorcist/README_gen.md) - Module generation pipeline
+- [NixOS/nixos-build/nixorcist/README_hub.md](NixOS/nixos-build/nixorcist/README_hub.md) - Hub regeneration flow
+- [NixOS/nixos-build/nixorcist/README_rebuild.md](NixOS/nixos-build/nixorcist/README_rebuild.md) - Rebuild and staging flow
+
+Reference-format variants:
+
+- [NixOS/nixos-build/nixorcist/README_CLI.md](NixOS/nixos-build/nixorcist/README_CLI.md)
+- [NixOS/nixos-build/nixorcist/README_LOCK.md](NixOS/nixos-build/nixorcist/README_LOCK.md)
+- [NixOS/nixos-build/nixorcist/README_UTILS.md](NixOS/nixos-build/nixorcist/README_UTILS.md)
+- [NixOS/nixos-build/nixorcist/README_GEN.md](NixOS/nixos-build/nixorcist/README_GEN.md)
+- [NixOS/nixos-build/nixorcist/README_HUB.md](NixOS/nixos-build/nixorcist/README_HUB.md)
+- [NixOS/nixos-build/nixorcist/README_REBUILD.md](NixOS/nixos-build/nixorcist/README_REBUILD.md)
+
+---
+
 # Repository Structure
 
 . ├── assets │   └── login.png │ ├── configuration.nix │ ├── modules │   ├── all-packages.nix │   ├── audio.nix │   ├── bootloader.nix │   ├── environment.nix │   ├── grub-theme.nix │   ├── kernel-params.nix │   ├── kernel-params-nvidia.nix │   ├── locale.nix │   ├── networking.nix │   ├── nixvim.nix │   ├── quickshell.nix │   ├── sddm.nix │   ├── users.nix │   ├── window-managers.nix │   └── zsh.nix │ ├── packages │   ├── all-packages.nix │   ├── communication.nix │   ├── core.nix │   ├── development.nix │   ├── eclipse.nix │   ├── games.nix │   ├── hyprland.nix │   ├── kde.nix │   ├── pkg-dump.nix │   ├── simplex-chat.nix │   ├── waybar-weather.nix │   ├── window-managers.nix │   └── zsh.nix │ ├── nixorcist │   ├── generated │   ├── lib │   ├── modules │   ├── lock │   └── nixorcist.sh │ └── scripts └── nix-rebuild-smart.sh

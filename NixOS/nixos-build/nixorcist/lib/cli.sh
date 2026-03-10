@@ -26,6 +26,9 @@ show_menu() {
   ║  transaction   Interactive add/remove in one flow              ║
   ║  select        Classic add/remove (uses transaction)           ║
   ║  import FILE   Import packages from file interactively         ║
+  ║  install ARGS  Import from arguments (+/- supported)           ║
+  ║  delete ARGS   Remove from arguments (module cleanup + hub)    ║
+  ║  chant ARGS    Mixed + and - argument flow in one command      ║
   ║  gen           Generate Nix modules from lock                  ║
   ║  hub           Regenerate hub (all-packages.nix)               ║
   ║  rebuild       NixOS rebuild with staging & cleanup            ║

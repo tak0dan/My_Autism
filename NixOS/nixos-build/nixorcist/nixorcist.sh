@@ -54,6 +54,36 @@ main() {
       show_header "Importing from $2"
       import_from_file "$2"
       ;;
+    install|add)
+      if [[ $# -lt 2 ]]; then
+        show_error "install requires package arguments"
+        echo "Usage: nixorcist install <pkg ...>"
+        return 1
+      fi
+      show_header "Install from arguments"
+      shift
+      install_from_args "$@"
+      ;;
+    delete|selecte|uninstall|remove)
+      if [[ $# -lt 2 ]]; then
+        show_error "delete requires package arguments"
+        echo "Usage: nixorcist delete <pkg ...>"
+        return 1
+      fi
+      show_header "Delete from arguments"
+      shift
+      delete_from_args "$@"
+      ;;
+    chant)
+      if [[ $# -lt 2 ]]; then
+        show_error "chant requires package arguments"
+        echo "Usage: nixorcist chant <tokens ...>"
+        return 1
+      fi
+      show_header "Chant: mixed install/delete"
+      shift
+      chant_from_args "$@"
+      ;;
     all)
       show_header "Full Pipeline: select → gen → hub → rebuild"
       run_transaction_cli && \

@@ -256,7 +256,10 @@ handle_missing_package() {
 
 import_from_file() {
   local file="$1"
+  local route="${2:-import}"
   local normalized token review_answer run_all_answer
+  local mode="add"
+  local rest segment sign
 
   if [[ -z "$file" || ! -f "$file" ]]; then
     show_error "Provide a valid text file"
@@ -271,12 +274,69 @@ import_from_file() {
     token="$(sanitize_token "$token")"
     [[ -z "$token" ]] && continue
 
-    if transaction_expand_and_stage add "$token"; then
-      continue
-    fi
+    rest="$token"
+    while [[ -n "$rest" ]]; do
+      sign="${rest:0:1}"
+      if [[ "$sign" == "+" || "$sign" == "-" ]]; then
+        [[ "$sign" == "+" ]] && mode="add" || mode="remove"
+        rest="${rest:1}"
+        continue
+      fi
 
-    handle_missing_package "$token" || show_item "?" "Unresolved: $token"
+      if [[ "$rest" == *[+-]* ]]; then
+        segment="${rest%%[+-]*}"
+        rest="${rest:${#segment}}"
+      else
+        segment="$rest"
+        rest=""
+      fi
+
+      segment="$(sanitize_token "$segment")"
+      [[ -z "$segment" ]] && continue
+
+      if [[ "$mode" == "add" ]]; then
+        if transaction_expand_and_stage add "$segment"; then
+          continue
+        fi
+        handle_missing_package "$segment" || show_item "?" "Unresolved: $segment"
+      else
+        if transaction_expand_and_stage remove "$segment"; then
+          continue
+        fi
+        if is_valid_token "$segment"; then
+          TX_REMOVE["$segment"]=1
+          unset TX_ADD["$segment"] 2>/dev/null || true
+          show_item "-" "Staged raw removal: $segment"
+        else
+          show_item "?" "Unresolved remove token: $segment"
+        fi
+      fi
+    done
   done <<< "$normalized"
+
+  local removed_files=0
+  local pkg file_name
+  remove_staged_modules() {
+    for pkg in "${!TX_REMOVE[@]}"; do
+      file_name="$(module_filename_for_pkg "$pkg")"
+      if [[ -f "$MODULES_DIR/$file_name.nix" ]] && grep -qF "$NIXORCIST_MARKER" "$MODULES_DIR/$file_name.nix" 2>/dev/null; then
+        rm -f "$MODULES_DIR/$file_name.nix"
+        show_item "-" "Removed module: $file_name.nix"
+        ((removed_files++))
+      fi
+    done
+  }
+
+  if [[ "${NIXORCIST_IMPORT_AUTO:-0}" == "1" ]]; then
+    transaction_apply
+    if [[ ${#TX_REMOVE[@]} -gt 0 ]]; then
+      remove_staged_modules
+      regenerate_hub
+    fi
+    transaction_cleanup
+    show_info "Import complete ($route)"
+    return 0
+  fi
 
   show_divider
   read -r -p "  Review transaction? [Y/n]: " review_answer
@@ -288,6 +348,11 @@ import_from_file() {
       transaction_menu_loop || { transaction_cleanup; return 1; }
       ;;
   esac
+
+  if [[ ${#TX_REMOVE[@]} -gt 0 ]]; then
+    remove_staged_modules
+    regenerate_hub
+  fi
 
   transaction_cleanup
 
@@ -303,4 +368,108 @@ import_from_file() {
       show_info "Import complete"
       ;;
   esac
+}
+
+module_filename_for_pkg() {
+  local pkg="$1"
+  echo "$pkg" | tr '/' '-' | tr ' ' '_' | tr ':' '_'
+}
+
+parse_chant_args() {
+  local -n out_add_ref=$1
+  local -n out_remove_ref=$2
+  shift 2
+
+  out_add_ref=()
+  out_remove_ref=()
+
+  local mode="add"
+  local raw token rest segment sign
+
+  for raw in "$@"; do
+    raw="${raw//,/ }"
+    for token in $raw; do
+      [[ -z "$token" ]] && continue
+      rest="$token"
+
+      while [[ -n "$rest" ]]; do
+        sign="${rest:0:1}"
+        if [[ "$sign" == "+" || "$sign" == "-" ]]; then
+          [[ "$sign" == "+" ]] && mode="add" || mode="remove"
+          rest="${rest:1}"
+          continue
+        fi
+
+        if [[ "$rest" == *[+-]* ]]; then
+          segment="${rest%%[+-]*}"
+          rest="${rest:${#segment}}"
+        else
+          segment="$rest"
+          rest=""
+        fi
+
+        segment="$(sanitize_token "$segment")"
+        [[ -z "$segment" ]] && continue
+
+        if ! is_valid_token "$segment"; then
+          show_error "Invalid token: $segment"
+          continue
+        fi
+
+        if [[ "$mode" == "add" ]]; then
+          out_add_ref+=("$segment")
+        else
+          out_remove_ref+=("$segment")
+        fi
+      done
+    done
+  done
+}
+
+install_from_args() {
+  if [[ $# -eq 0 ]]; then
+    show_error "install requires at least one package"
+    return 1
+  fi
+
+  local tmp_file
+
+  tmp_file="$(mktemp /tmp/nixorcist-install-args.XXXXXX)"
+  printf '%s\n' "$@" > "$tmp_file"
+
+  NIXORCIST_IMPORT_AUTO=1 import_from_file "$tmp_file" install
+  rm -f "$tmp_file"
+}
+
+delete_from_args() {
+  if [[ $# -eq 0 ]]; then
+    show_error "delete requires at least one package"
+    return 1
+  fi
+
+  local tmp_file
+  tmp_file="$(mktemp /tmp/nixorcist-delete-args.XXXXXX)"
+
+  # Force remove mode first; inline + and - switches are still supported afterwards.
+  printf '%s\n' '-' > "$tmp_file"
+  printf '%s\n' "$@" >> "$tmp_file"
+
+  NIXORCIST_IMPORT_AUTO=1 import_from_file "$tmp_file" delete
+  rm -f "$tmp_file"
+}
+
+chant_from_args() {
+  if [[ $# -eq 0 ]]; then
+    show_error "chant requires package arguments"
+    return 1
+  fi
+
+  local tmp_file
+  tmp_file="$(mktemp /tmp/nixorcist-chant-args.XXXXXX)"
+  printf '%s\n' "$@" > "$tmp_file"
+
+  NIXORCIST_IMPORT_AUTO=1 import_from_file "$tmp_file" chant
+  rm -f "$tmp_file"
+
+  show_success "Chant complete"
 }

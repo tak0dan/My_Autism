@@ -50,14 +50,6 @@ Reference-format variants:
 
 ---
 
-# Repository Structure
-
-. ├── assets │   └── login.png │ ├── configuration.nix │ ├── modules │   ├── all-packages.nix │   ├── audio.nix │   ├── bootloader.nix │   ├── environment.nix │   ├── grub-theme.nix │   ├── kernel-params.nix │   ├── kernel-params-nvidia.nix │   ├── locale.nix │   ├── networking.nix │   ├── nixvim.nix │   ├── quickshell.nix │   ├── sddm.nix │   ├── users.nix │   ├── window-managers.nix │   └── zsh.nix │ ├── packages │   ├── all-packages.nix │   ├── communication.nix │   ├── core.nix │   ├── development.nix │   ├── eclipse.nix │   ├── games.nix │   ├── hyprland.nix │   ├── kde.nix │   ├── pkg-dump.nix │   ├── simplex-chat.nix │   ├── waybar-weather.nix │   ├── window-managers.nix │   └── zsh.nix │ ├── nixorcist │   ├── generated │   ├── lib │   ├── modules │   ├── lock │   └── nixorcist.sh │ └── scripts └── nix-rebuild-smart.sh
-
-Some directories that previously existed (`ZaneyOS`, `/external`) were intentionally removed as they were no longer needed for the configuration.
-
----
-
 # Design Philosophy
 
 The configuration follows several principles.

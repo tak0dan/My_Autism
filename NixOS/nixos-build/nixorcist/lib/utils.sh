@@ -21,9 +21,12 @@ get_pkg_description() {
       pkgs = import <nixpkgs> {};
       val = builtins.tryEval pkgs.${1};
     in
-      if val.success && builtins.isAttrs val.value
+      if val.success && builtins.isAttrs val.value && (val.value.type or null) == \"derivation\"
       then
         (val.value.meta.description or \"No description\")
+      else if val.success && builtins.isAttrs val.value
+      then
+        \"Attribute set\"
       else
         \"Not a package\"
   " 2>/dev/null
@@ -78,4 +81,43 @@ list_attrset_children() {
     in
       builtins.concatStringsSep \"\n\" (builtins.attrNames pkgs.${1})
   " 2>/dev/null
+}
+
+is_valid_token() {
+  local token="$1"
+  [[ -n "$token" ]] && [[ "$token" =~ ^[a-zA-Z0-9._+-]+$ ]]
+}
+
+sanitize_token() {
+  local token="$1"
+  token="${token,,}"
+  token="$(echo "$token" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  echo "$token"
+}
+
+resolve_entry_to_packages() {
+  local entry="$1"
+  local -n out_ref=$2
+  out_ref=()
+
+  if is_derivation "$entry"; then
+    out_ref+=("$entry")
+    return 0
+  fi
+
+  if is_attrset "$entry"; then
+    local child resolved
+    while IFS= read -r child; do
+      [[ -z "$child" ]] && continue
+      resolved="$entry.$child"
+      if is_derivation "$resolved"; then
+        out_ref+=("$resolved")
+      fi
+    done < <(list_attrset_children "$entry")
+
+    [[ ${#out_ref[@]} -gt 0 ]]
+    return
+  fi
+
+  return 1
 }

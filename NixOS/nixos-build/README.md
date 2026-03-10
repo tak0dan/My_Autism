@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [⚠️⚠️⚠️] DO NOT COPY AND PASTE IT BLINDLY, CREATE BACKUP FIRST[⚠️⚠️⚠️] 
 
 # Got a backup already? Good :) 
@@ -162,145 +163,179 @@ To replicate the intended Hyprland experience:
 ## 1. Clone the original dotfiles
 ```
 git clone https://github.com/LinuxBeginnings/Hyprland-Dots
+=======
+# WtfOS - Modular NixOS Build
+
+This directory contains the active NixOS configuration for WtfOS, organized as a modular codebase with declarative package management and safe rebuild tooling.
+
+## Project Goals
+
+- Keep system configuration modular and readable.
+- Keep package declaration flows declarative and reproducible.
+- Avoid monolithic editing in configuration.nix.
+- Support safe iterative changes with staging and rebuild checks.
+
+## Directory Layout
+
+```text
+NixOS/nixos-build/
+├── README.md
+├── configuration.nix
+├── modules/
+├── packages/
+├── nixorcist/
+│   ├── nixorcist.sh
+│   ├── lib/
+│   └── generated/
+└── scripts/
+	└── nix-rebuild-smart.sh
+>>>>>>> 2e6a6d6 (docs(nixos-build): rewrite README for current project state and new nixorcist command flows)
 ```
 
-## 2. Replace certain configs
+## Documentation Index
 
-Override parts of the cloned configuration using the files from:
-[https://github.com/tak0dan/WtfOS/tree/main/Configs/Hyprland%2Blinux_beginnings](https://github.com/tak0dan/WtfOS/tree/main/Configs/Hyprland%2Blinux_beginnings)
+Core docs:
 
-Specifically:
+- [modules/README.md](modules/README.md) - system modules structure and purpose
+- [nixorcist/README.md](nixorcist/README.md) - Nixorcist overview and usage
 
-waybar btop wallust
+Nixorcist technical docs:
 
-Example:
-```
-cp -r /path/to/cloned/configs/* ~/.config/
-```
-These overrides adapt the original dotfiles to work perfectly with this NixOS configuration.
+- [nixorcist/README_cli.md](nixorcist/README_cli.md)
+- [nixorcist/README_lock.md](nixorcist/README_lock.md)
+- [nixorcist/README_utils.md](nixorcist/README_utils.md)
+- [nixorcist/README_gen.md](nixorcist/README_gen.md)
+- [nixorcist/README_hub.md](nixorcist/README_hub.md)
+- [nixorcist/README_rebuild.md](nixorcist/README_rebuild.md)
 
-Without these overrides some visual elements or scripts may behave differently.
+Reference variants:
 
----
+- [nixorcist/README_CLI.md](nixorcist/README_CLI.md)
+- [nixorcist/README_LOCK.md](nixorcist/README_LOCK.md)
+- [nixorcist/README_UTILS.md](nixorcist/README_UTILS.md)
+- [nixorcist/README_GEN.md](nixorcist/README_GEN.md)
+- [nixorcist/README_HUB.md](nixorcist/README_HUB.md)
+- [nixorcist/README_REBUILD.md](nixorcist/README_REBUILD.md)
 
-# Kernel Parameters
+## Nixorcist Package Management
 
-Kernel parameters are located in:
+Nixorcist is the package orchestration layer for this project.
 
-modules/kernel-params.nix
+It uses this flow:
 
-If the system uses **NVIDIA GPUs**, replace it with:
+lock file -> generated modules -> hub module -> system rebuild
 
-modules/kernel-params-nvidia.nix
+This avoids manually editing large environment.systemPackages lists.
 
-However, the best approach is to generate parameters based on your own hardware.
+### Command Overview
 
-You can:
+Interactive flow:
 
-- copy parameters from a clean `configuration.nix`
-- adjust them for your system
-
-Kernel parameters should always match the specific hardware environment.
-
----
-
-# Nixorcist Package Management
-
-This repository includes **Nixorcist**, a helper tool for managing packages.
-
-It introduces a workflow where packages are defined through:
-
-lock file ↓ generated modules ↓ hub module ↓ system rebuild
-
-Instead of editing package lists manually.
-
-Basic usage(It might need sudo) :
-
-```
-nixorcist select
+```bash
+nixorcist transaction
 ```
 
-Then:
+File import flow:
+
+```bash
+nixorcist import <file>
 ```
-nixorcist gen 
-nixorcist hub 
+
+Argument wrappers routed through import:
+
+```bash
+nixorcist install <args...>      # alias: add
+nixorcist delete <args...>       # aliases: remove, uninstall, selecte
+nixorcist chant <args...>        # mixed add/remove in one command
+```
+
+Generation and apply:
+
+```bash
+nixorcist gen
+nixorcist hub
 nixorcist rebuild
 ```
-Or run everything:
-```
+
+All-in-one flow:
+
+```bash
 nixorcist all
 ```
-This system generates Nix modules automatically from the lock file.
 
----
+### Import/Chant +/- Parser Semantics
 
-# Smart Rebuild Script
+The import parser supports mode switches:
 
-The repository includes a rebuild helper:
+- default mode is install
+- `+` switches to install mode
+- `-` switches to delete mode
+- switches can appear multiple times and inline
 
-scripts/nix-rebuild-smart.sh
+Example:
 
-The script improves the normal rebuild process by:
+```bash
+nixorcist chant a b,c,d -e f,+a +f+g h + l - l
+```
+
+This resolves to:
+
+- install: a, b, c, d, a, f, g, h, l
+- remove: e, f, l
+
+Removals are applied after additions, so delete has natural final priority.
+
+### Typical Nixorcist Workflow
+
+1. Stage package changes:
+
+```bash
+nixorcist transaction
+```
+
+2. Generate package modules:
+
+```bash
+nixorcist gen
+```
+
+3. Regenerate hub:
+
+```bash
+nixorcist hub
+```
+
+4. Apply rebuild:
+
+```bash
+nixorcist rebuild
+```
+
+Or run everything:
+
+```bash
+nixorcist all
+```
+
+## Smart Rebuild Script
+
+The repository includes a rebuild helper at [scripts/nix-rebuild-smart.sh](scripts/nix-rebuild-smart.sh).
+
+It improves standard rebuild handling by:
 
 - detecting evaluation warnings
 - locating renamed options
-- offering automated replacements
-- interactive confirmation mode
+- offering guided replacement behavior
+- supporting interactive confirmation mode
 
-This helps maintain the system when NixOS changes option names between releases.
+This helps keep the configuration maintainable across NixOS changes.
 
----
+## Notes
 
-# Typical Workflow
+- Prefer testing changes incrementally.
+- Keep module boundaries clear.
+- Keep generated files managed through Nixorcist flows.
 
-## Add packages
-
-nixorcist select
-
-## Generate modules
-
-nixorcist gen
-
-## Update hub
-
-nixorcist hub
-
-## Rebuild system
-
-nixorcist rebuild
-
-Or simply:
-```
-nixorcist all
-```
----
-
-# Goals of this Configuration
-
-The system is designed to achieve:
-
-- **clarity** — everything lives in the correct module  
-- **scalability** — easy to add new components  
-- **reproducibility** — reliable rebuilds  
-- **experimentation** — safe environment for testing  
-- **automation** — less manual editing
-
----
-
-# Notes
-
-Some modules or directories may evolve over time as the configuration continues to be refined.
-
-The structure is intentionally flexible so that:
-
-- new package groups  
-- new desktop environments  
-- additional automation tools  
-
-can be integrated without restructuring the entire system.
-
----
-
-# License
+## License
 
 MIT

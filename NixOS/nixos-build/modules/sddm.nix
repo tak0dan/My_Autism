@@ -131,7 +131,10 @@ let
     ## These don't necessarily need to translate anything. You can enter whatever you want here.
   '';
   # must be added to both systemPackages and theme
-  sugar-candy = pkgs.callPackage ../packages/sddm-sugar-candy-theme { inherit themeconf; };
+  sugar-candy =
+    if builtins.pathExists ../packages/sddm-sugar-candy-theme
+    then pkgs.callPackage ../packages/sddm-sugar-candy-theme { inherit themeconf; }
+    else null;
 in
 {
   imports = [ ];
@@ -141,10 +144,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = with pkgs; [
-      bibata-cursors
-      sugar-candy
-    ];
+    environment.systemPackages = with pkgs;
+      [ bibata-cursors ]
+      ++ lib.optional (sugar-candy != null) sugar-candy;
 
     fonts.packages = with pkgs; [ (nerdfonts.override { fonts = [ "FiraCode" ]; }) ];
 

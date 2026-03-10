@@ -1,658 +1,293 @@
-````markdown
-# 🧙 Nixorcist
-
-**Nixorcist** is a modular package orchestration system for **NixOS** that manages packages through generated modules instead of manually editing `environment.systemPackages`.
-
-It introduces a **lock-driven workflow**, where the desired package list becomes the source of truth and everything else is generated automatically.
-
-The project is designed to:
-
-- Reduce manual editing of `configuration.nix`
-- Keep packages modular
-- Allow safe and reproducible rebuilds
-- Provide an interactive way to search and add packages
-- Automatically resolve some rebuild warnings
-- Separate *package intent* from *system configuration structure*
-
----
-
-# Philosophy
-
-Traditional NixOS setups usually look like this:
-
-```nix
-environment.systemPackages = with pkgs; [
-  firefox
-  git
-  neovim
-  ripgrep
-];
-````
-
-This works, but as systems grow it becomes harder to manage:
-
-* large monolithic lists
-* duplicate declarations
-* hard to split packages logically
-* harder to automate
-
-**Nixorcist** changes the workflow:
+# nixorcist - The Declarative NixOS Package Sorcerer
 
 ```
-user selection
-      ↓
-lock file
-      ↓
-module generator
-      ↓
-generated modules
-      ↓
-hub module
-      ↓
-system rebuild
+  ╔═══════════════════════════════════════════════════════╗
+  ║           NIXORCIST - Package Sorcery                 ║
+  ║  The declarative NixOS package management framework   ║
+  ╚═══════════════════════════════════════════════════════╝
 ```
 
-Instead of editing Nix files manually, you manage packages through **lock entries** and the system generates the Nix modules automatically.
+A beautiful, modular Bash framework for managing NixOS packages declaratively through an interactive transaction-based interface.
 
----
+## Features
 
-# Core Components
+- **Interactive Package Management** - Fuzzy-find and select packages via fzf
+- **Attribute Set Expansion** - Automatically expand package namespaces to concrete derivations
+- **Transaction Engine** - Stage, preview, and apply package changes atomically
+- **Module Generation** - Automatic creation of Nix modules from lock file
+- **Visual CLI** - Beautiful ASCII logo, icons, and formatted output
+- **Safe Rebuilds** - Staging, validation, and cleanup of NixOS changes
+- **Modular Architecture** - Separated concerns with pure bash libraries
 
-The system consists of two main parts:
+## Quick Start
 
-1. **Nixorcist package orchestration**
-2. **Smart rebuild script**
+### Installation (Fresh NixOS)
 
----
+```bash
+# Automated setup (recommended)
+cd WtfOS/NixOS
+sudo bash install.sh
 
-# Repository Structure
-
-Example configuration layout:
-
-```
-.
-├── assets
-│   └── login.png
-├── bluetooth.nix
-├── configuration.nix
-├── external
-│   ├── ags
-│   ├── catppuccin
-│   ├── home-manager
-│   ├── nixvim
-│   └── quickshell
-├── modules
-│   ├── all-packages.nix
-│   ├── audio.nix
-│   ├── bootloader.nix
-│   ├── environment.nix
-│   ├── grub-theme.nix
-│   ├── kernel-params.nix
-│   ├── kernel-params-nvidia.nix
-│   ├── locale.nix
-│   ├── networking.nix
-│   ├── nixvim.nix
-│   ├── quickshell.nix
-│   ├── sddm.nix
-│   ├── users.nix
-│   ├── window-managers.nix
-│   └── zsh.nix
-│
-├── nixorcist
-│   ├── generated
-│   │   ├── all-packages.nix
-│   │   └── default.nix
-│   │
-│   ├── lib
-│   │   ├── dirs.sh
-│   │   ├── generate-packages.sh
-│   │   ├── gen.sh
-│   │   ├── hub.sh
-│   │   ├── index.sh
-│   │   ├── lock.sh
-│   │   ├── rebuild.sh
-│   │   └── utils.sh
-│   │
-│   ├── lock
-│   ├── modules
-│   └── nixorcist.sh
-│
-├── packages
-│   ├── all-packages.nix
-│   ├── communication.nix
-│   ├── core.nix
-│   ├── development.nix
-│   ├── eclipse.nix
-│   ├── games.nix
-│   ├── hyprland.nix
-│   ├── kde.nix
-│   ├── pkg-dump.nix
-│   ├── simplex-chat.nix
-│   ├── waybar-weather.nix
-│   ├── window-managers.nix
-│   └── zsh.nix
-│
-└── scripts
-    └── nix-rebuild-smart.sh
+# Or follow manual steps in INSTALL.md
 ```
 
-Important directories:
+### Basic Usage
 
-| Directory    | Purpose                                 |
-| ------------ | --------------------------------------- |
-| `modules/`   | Core system modules                     |
-| `packages/`  | Custom curated package groups           |
-| `nixorcist/` | Package generation engine               |
-| `scripts/`   | Utility scripts including smart rebuild |
+```bash
+# Interactive package transaction
+nixorcist transaction
 
----
-
-# Nixorcist Architecture
-
-The system is built from several layers.
-
----
-
-# 1. Lock File
-
-The lock file stores the **desired packages**.
-
-Example:
-
-```
-firefox
-git
-ripgrep
-neovim
-```
-
-The lock file is treated as the **source of truth**.
-
-Everything else is generated from it.
-
----
-
-# 2. Module Generation
-
-For every entry in the lock file, Nixorcist generates a module:
-
-Example generated module:
-
-```nix
-{ config, pkgs, ... }:
-
-{
-  environment.systemPackages = with pkgs; [
-    firefox
-  ];
-}
-```
-
-Each package becomes its **own Nix module**.
-
-Advantages:
-
-* no giant lists
-* easy diffing
-* clean imports
-* modular structure
-
----
-
-# 3. Hub Module
-
-Generated modules are imported into a **hub module**.
-
-Example:
-
-```nix
-{
-  imports = [
-    ./modules/firefox.nix
-    ./modules/git.nix
-    ./modules/neovim.nix
-  ];
-}
-```
-
-The hub acts as a **single entry point** for the generated modules.
-
-Your main configuration can then simply import:
-
-```nix
-imports = [
-  ./nixorcist/generated/all-packages.nix
-];
-```
-
----
-
-# ⚠️ Important Hub Warning
-
-If you already have a hub file that contains **declared functions or complex logic**, **do NOT reuse it as the Nixorcist hub**.
-
-Example of problematic hub:
-
-```nix
-{ config, pkgs, ... }:
-
-let
-  myCustomFunction = ...
-in
-{
-  imports = [ ... ];
-}
-```
-
-Why this matters:
-
-Nixorcist regenerates the hub automatically.
-
-During regeneration it only reconstructs **imports**, so:
-
-* functions may be removed
-* declarations may be misplaced
-* the file may be overwritten
-
-This can break evaluation or produce incorrect module structure.
-
-### Recommendation
-
-Keep the **Nixorcist hub completely isolated**:
-
-```
-nixorcist/generated/all-packages.nix
-```
-
-And import it from another module instead.
-
-Example:
-
-```nix
-imports = [
-  ./modules/all-packages.nix
-  ./nixorcist/generated/all-packages.nix
-];
-```
-
-This prevents accidental overwrites.
-
----
-
-# CLI Usage
-
-Main command:
-
-```
-nixorcist <command>
-```
-
----
-
-# Commands
-
-## Select packages
-
-```
-nixorcist select
-```
-
-Interactive selector powered by **fzf**.
-
-Features:
-
-* fuzzy search
-* namespace detection
-* multiple selection
-* add or remove packages
-* automatic lock update
-
----
-
-## Generate modules
-
-```
+# Generate Nix modules from lock file
 nixorcist gen
-```
 
-Reads the lock file and creates package modules.
-
----
-
-## Regenerate hub
-
-```
-nixorcist hub
-```
-
-Updates the hub file that imports all generated modules.
-
----
-
-## Run rebuild
-
-```
+# Rebuild NixOS system
 nixorcist rebuild
-```
 
-Executes the **smart rebuild pipeline**.
-
----
-
-## Run full pipeline
-
-```
+# Do everything at once
 nixorcist all
 ```
 
-Equivalent to:
+## Architecture
 
 ```
-select
-gen
-hub
-rebuild
+nixorcist/
+├── nixorcist.sh           # Main entry point (command dispatcher)
+├── lib/
+│   ├── cli.sh             # Visual interface components
+│   ├── lock.sh            # Package lock & transaction engine
+│   ├── utils.sh           # Validation & package resolution
+│   ├── gen.sh             # Module generation
+│   ├── hub.sh             # Hub file aggregation
+│   └── rebuild.sh         # NixOS rebuild pipeline
+├── generated/             # Output directory
+│   ├── .modules/          # Generated Nix modules (one per package)
+│   └── all-packages.nix   # Hub that imports all modules
+├── .lock                  # Package lock file
+└── cache/                 # Index and performance cache
 ```
 
----
+### Module Structure
 
-## Import packages from file
+| Module | Purpose | Key Functions |
+|--------|---------|----------------|
+| **cli.sh** | Visual output | `show_logo()`, `show_menu()`, `show_header()`, `show_item()` |
+| **lock.sh** | Package management engine | `run_transaction_cli()`, `import_from_file()`, `transaction_apply()` |
+| **utils.sh** | Validation & resolution | `is_valid_token()`, `resolve_entry_to_packages()`, `is_derivation()` |
+| **gen.sh** | Module generation | `generate_modules()`, `purge_all_modules()` |
+| **hub.sh** | Hub aggregation | `regenerate_hub()` |
+| **rebuild.sh** | System rebuild | `run_rebuild()`, `cleanup_staging()` |
 
+## Commands
+
+```bash
+nixorcist help                 # Show help and command menu
+nixorcist transaction          # Interactive add/remove/preview
+nixorcist select               # Select packages to add
+nixorcist add                  # Alias for transaction
+nixorcist remove               # Alias for transaction
+nixorcist import FILE          # Import packages from file
+nixorcist gen                  # Generate modules from lock
+nixorcist hub                  # Regenerate import hub
+nixorcist rebuild              # Rebuild NixOS system
+nixorcist all                  # transaction → gen → hub → rebuild
+nixorcist purge                # Remove all modules & clear lock
 ```
+
+## Documentation
+
+Detailed documentation for each module:
+
+### Installation & Setup
+- [INSTALL.md](../INSTALL.md) - Complete installation guide with troubleshooting
+- [install.sh](../install.sh) - Automated post-fresh-install script
+
+### Module Documentation
+- [README_cli.md](README_cli.md) - CLI visual interface
+- [README_lock.md](README_lock.md) - Transaction engine & lock management
+- [README_utils.md](README_utils.md) - Validation & package utilities
+- [README_gen.md](README_gen.md) - Module generation
+- [README_hub.md](README_hub.md) - Hub file management
+- [README_rebuild.md](README_rebuild.md) - System rebuild pipeline
+
+## Workflow Examples
+
+### Adding Packages
+
+```bash
+# Interactive selection
+nixorcist transaction
+# ❯ fzf selector shows nixpkgs
+# Press TAB to select multiple
+# Menu: [1] Stage additions [5] Preview [6] Apply
+
+# Or import from file
+echo -e "firefox\ngit\nvim" > packages.txt
 nixorcist import packages.txt
 ```
 
-Supported separators:
+### Attribute Set Expansion
 
-```
-firefox git neovim
-```
+Attribute sets (package namespaces) are automatically expanded to their constituent packages:
 
-```
-firefox,git,neovim
-```
+```bash
+# Lock file entry:
+eclipses
 
-```
-firefox
-git
-neovim
-```
-
----
-
-## Purge generated modules
-
-```
-nixorcist purge
+# Expands to:
+eclipses.eclipse-java
+eclipses.eclipse-cpp
+eclipses.eclipse-sdk
+# ... all IDE variants installed as separate modules
 ```
 
-Deletes:
+### Full Pipeline
 
-* generated modules
-* lock entries
-
----
-
-# Smart Rebuild Script
-
-Located in:
-
-```
-scripts/nix-rebuild-smart.sh
-```
-
-This script extends the standard:
-
-```
-nixos-rebuild switch
-```
-
----
-
-# Purpose
-
-It automatically detects and fixes **evaluation warnings caused by renamed options**.
-
-Example warning:
-
-```
-evaluation warning:
-'services.xserver.desktopManager.plasma5'
-was moved.
-Please use 'services.desktopManager.plasma6'
-```
-
----
-
-# Smart Rebuild Workflow
-
-The script performs several steps:
-
-### 1. Run rebuild
-
-```
-nixos-rebuild switch --upgrade
-```
-
-The output is captured.
-
----
-
-### 2. Parse warnings
-
-The script scans rebuild output for:
-
-```
-evaluation warning:
-```
-
----
-
-### 3. Extract rename information
-
-Example extraction:
-
-```
-OLD: services.xserver.desktopManager.plasma5
-NEW: services.desktopManager.plasma6
-```
-
----
-
-### 4. Locate occurrences
-
-Searches inside:
-
-```
-/etc/nixos
-```
-
-Example result:
-
-```
-configuration.nix:42: services.xserver.desktopManager.plasma5.enable = true
-```
-
----
-
-### 5. Replacement options
-
-The script provides interactive options:
-
-```
-[Y] Replace ALL
-[n] Skip
-[c] Controlled
-```
-
----
-
-## Replace ALL
-
-Automatically updates every occurrence across the configuration.
-
----
-
-## Controlled mode
-
-Shows each occurrence individually:
-
-```
-File : configuration.nix
-Line : 42
-Code : services.xserver.desktopManager.plasma5.enable = true
-```
-
-Then asks:
-
-```
-Replace this occurrence? [y/N]
-```
-
----
-
-## Skip
-
-Ignore the warning.
-
----
-
-# Safety Features
-
-The rebuild system includes several safeguards:
-
-### Staging configuration
-
-Before rebuild:
-
-```
-/etc/nixos/.staging
-```
-
-is created and populated.
-
----
-
-### Build validation
-
-The configuration is built before switching.
-
-If build fails:
-
-```
-system configuration is not activated
-```
-
----
-
-### Safe activation
-
-Only successful builds are switched into the running system.
-
----
-
-# Dependencies
-
-Required:
-
-```
-nix
-nixos-rebuild
-fzf
-grep
-sed
-awk
-```
-
-Recommended:
-
-```
-git
-ripgrep
-```
-
----
-
-# Example Workflow
-
-Typical usage:
-
-### 1. Select packages
-
-```
-nixorcist select
-```
-
----
-
-### 2. Generate modules
-
-```
-nixorcist gen
-```
-
----
-
-### 3. Regenerate hub
-
-```
-nixorcist hub
-```
-
----
-
-### 4. Rebuild system
-
-```
-nixorcist rebuild
-```
-
----
-
-### Or simply
-
-```
+```bash
+# Stage changes, generate modules, aggregate hub, rebuild all
 nixorcist all
+
+# Or step-by-step control:
+nixorcist transaction   # Stage packages
+nixorcist gen          # Generate Nix modules
+nixorcist hub          # Create import aggregation
+nixorcist rebuild      # Apply to running system
 ```
 
+## Code of Conduct
+
+### Core Principles
+
+1. **Pure Functions** - Each module encapsulates a single responsibility
+2. **Transaction Safety** - Changes never apply until explicitly confirmed
+3. **User Feedback** - Every action provides clear visual feedback
+4. **Idempotency** - Safe to re-run without side effects
+5. **Declarativity** - Lock file is source of truth; everything else is derived
+
+### Bash Style
+
+- Strict mode: `set -euo pipefail`
+- Quote variables: `"$var"` not `$var`
+- Use array references: `local -n arr=$1`
+- Source dependencies explicitly
+- Meaningful variable names (no single letters except loops)
+
+## Integration with NixOS
+
+### Configuration Setup
+
+In `/etc/nixos/configuration.nix`:
+
+```nix
+imports = [
+  ./hardware-configuration.nix
+  ./nixorcist/generated/all-packages.nix  # Nixorcist hub
+];
+
+nix.settings.experimental-features = [ "nix-command" "flakes" ];
+```
+
+### Rebuild Process
+
+```
+User runs: nixorcist rebuild
+           ↓
+    Create staging snapshot
+           ↓
+    Validate with nix-build
+           ↓
+    Execute rebuild script
+           ↓
+    Clean up temp files
+           ↓
+    ✓ System updated
+```
+
+## Troubleshooting
+
+### Common Issues
+
+| Problem | Solution |
+|---------|----------|
+| "flakes is not a known option" | Enable in configuration.nix: `nix.settings.experimental-features = [ "flakes" ];` |
+| "Package not found" | Check spelling; run `nixorcist transaction` for fuzzy search |
+| "Rebuild failed" | Inspect `.staging/` directory; check `configuration.nix` syntax |
+| "Permission denied" | Run nixorcist with sudo: `sudo nixorcist ...` |
+
+For detailed troubleshooting, see [INSTALL.md](../INSTALL.md#troubleshooting).
+
+## Performance
+
+- **Nix evaluation**: Cached via index file (first run ~10s, subsequent immediate)
+- **fzf selector**: Instant for <10k packages
+- **Module generation**: O(n) where n = lock entries (~100 packages in ~5s)
+- **System rebuild**: Depends on complexity (typically 30s-5m)
+
+## System Requirements
+
+- **NixOS** - Any recent version (24.05+)
+- **Bash** - Version 4.0+ (array support)
+- **Tools**: `fzf`, `nix`, `sed`, `awk`, `grep`
+- **Disk**: 5GB free (initial), 1GB for cache
+- **Memory**: 2GB minimum (4GB recommended)
+
+## Security
+
+- ✓ All user input validated before processing
+- ✓ Tokens checked against safe character whitelist
+- ✓ Module generation validates packages via Nix
+- ✓ Staging directory used for safe rebuild validation
+- ✓ Marked files prevent accidental data loss
+
+## Contributing
+
+To improve nixorcist:
+
+1. Review module-specific documentation
+2. Follow bash style guidelines (documented in README_*)
+3. Test changes: `bash -n script.sh` (syntax check)
+4. Update README if changing function signatures
+
+## File Structure
+
+```
+.
+├── nixorcist.sh              # Entry point
+├── lib/
+│   ├── cli.sh               # UI components
+│   ├── lock.sh              # Transaction engine
+│   ├── utils.sh             # Validation layer
+│   ├── gen.sh               # Module generation
+│   ├── hub.sh               # Hub creation
+│   └── rebuild.sh           # Rebuild pipeline
+├── generated/               # Auto-generated
+│   ├── .modules/            # Nix modules
+│   └── all-packages.nix     # Import hub
+├── .lock                    # Package lock (version-controlled)
+├── cache/                   # Index cache (ignore in git)
+├── README_*.md              # Module documentation
+└── ... (config files)
+```
+
+## History
+
+- **Phase 1**: Basic package validation and import improvements
+- **Phase 2**: Attribute set expansion and transaction engine
+- **Phase 3**: Git integration and version control
+- **Phase 4**: Complete visual polish with ASCII logo and UI framework
+- **Phase 5**: Comprehensive documentation and automated installation
+
+## License
+
+See project root for license information.
+
+## Support
+
+- Check module README files (README_*.md) for detailed function documentation
+- Review generated comments in .nix files for tracing
+- Inspect staging directory: `/etc/nixos/.staging/`
+- Run with `-v` flag for verbose output (where supported)
+
 ---
 
-# Design Goals
-
-Nixorcist was built with several design goals:
-
-* **modularity**
-* **automation**
-* **safety**
-* **clean configuration**
-* **reproducibility**
-
-It separates the concerns of:
-
-| Layer            | Responsibility       |
-| ---------------- | -------------------- |
-| Lock file        | desired packages     |
-| Module generator | produce Nix modules  |
-| Hub              | collect imports      |
-| Rebuild          | deploy configuration |
-
----
-
-# Future Ideas
-
-Possible improvements:
-
-* flake support
-* profile-based package groups
-* automatic orphan module cleanup
-* package dependency graph
-* package usage statistics
-* home-manager integration
-* remote lock import
-
----
-
-# License
-
-MIT
+**nixorcist** — *Declarative package management through the arcane arts of Nix*
 

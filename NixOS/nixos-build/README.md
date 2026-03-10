@@ -162,7 +162,6 @@ To replicate the intended Hyprland experience:
 ## 1. Clone the original dotfiles
 ```
 git clone https://github.com/LinuxBeginnings/Hyprland-Dots
-
 ```
 
 ## Documentation Index

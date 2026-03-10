@@ -162,33 +162,7 @@ To replicate the intended Hyprland experience:
 ## 1. Clone the original dotfiles
 ```
 git clone https://github.com/LinuxBeginnings/Hyprland-Dots
-=======
-# WtfOS - Modular NixOS Build
 
-This directory contains the active NixOS configuration for WtfOS, organized as a modular codebase with declarative package management and safe rebuild tooling.
-
-## Project Goals
-
-- Keep system configuration modular and readable.
-- Keep package declaration flows declarative and reproducible.
-- Avoid monolithic editing in configuration.nix.
-- Support safe iterative changes with staging and rebuild checks.
-
-## Directory Layout
-
-```text
-NixOS/nixos-build/
-├── README.md
-├── configuration.nix
-├── modules/
-├── packages/
-├── nixorcist/
-│   ├── nixorcist.sh
-│   ├── lib/
-│   └── generated/
-└── scripts/
-	└── nix-rebuild-smart.sh
->>>>>>> 2e6a6d6 (docs(nixos-build): rewrite README for current project state and new nixorcist command flows)
 ```
 
 ## Documentation Index

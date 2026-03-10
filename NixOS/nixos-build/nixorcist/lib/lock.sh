@@ -38,76 +38,16 @@ run_rebuild() {
 }
 
 add_packages() {
-  ensure_index
-
-  while true; do
-    pkg=$(cut -d'|' -f1 "$(get_index_file)" | fzf \
-      --height=80% \
-      --prompt="Select package > " \
-      --preview "grep '^{}|' $(get_index_file) | cut -d'|' -f2" \
-      --preview-window=down:3:wrap)
-
-    [[ -z "$pkg" ]] && break
-
-    if is_attrset "$pkg"; then
-      echo "Namespace detected: $pkg"
-
-      mapfile -t variants < <(
-        list_attrset_children "$pkg" | fzf \
-          --multi \
-          --header="TAB to select multiple packages" \
-          --prompt="Select $pkg variants > "
-      )
-
-      [[ ${#variants[@]} -eq 0 ]] && continue
-
-      for variant in "${variants[@]}"; do
-        resolved="$pkg.$variant"
-
-        if grep -qx "$resolved" "$LOCK_FILE"; then
-          echo "Already present: $resolved"
-        else
-          echo "$resolved" >> "$LOCK_FILE"
-          echo "Added: $resolved"
-        fi
-      done
-
-      continue
-    fi
-
-    if grep -qx "$pkg" "$LOCK_FILE"; then
-      echo "Already present: $pkg"
-    else
-      echo "$pkg" >> "$LOCK_FILE"
-      echo "Added: $pkg"
-    fi
-  done
-
-  echo "Lock updated."
+  source "$ROOT/lib/transaction.sh"
+  transaction_menu
 }
 
 
 
 
 remove_packages() {
-  mapfile -t current < <(read_lock_entries)
-
-  selected=$(printf '%s\n' "${current[@]}" | \
-    fzf --multi --prompt="REMOVE> ")
-
-  [[ -z "$selected" ]] && return
-
-  tmp=()
-  while IFS= read -r entry; do
-    for c in "${current[@]}"; do
-      [[ "$c" == "$entry" ]] && continue
-      tmp+=("$c")
-    done
-  done <<< "$selected"
-
-  printf '%s\n' "${tmp[@]}" | sort -u > "$LOCK_FILE"
-  echo "$BUILT_MARKER" >> "$LOCK_FILE"
-  echo "Removed from lock."
+  source "$ROOT/lib/transaction.sh"
+  transaction_menu
 }
 
 # ===============================
@@ -116,62 +56,46 @@ remove_packages() {
 
 import_from_file() {
   local file="$1"
-
-  while :; do
-    [[ -z "$file" || ! -f "$file" ]] && {
-      echo "Provide a valid text file."
-      return 1
-    }
-
-    echo
-    echo "Reading $file"
-
-    # Normalize separators → lowercase
-    normalized=$(tr ',\n ' '|||' < "$file" \
-      | tr -s '|' \
-      | sed 's/^|//;s/|$//' \
-      | tr '[:upper:]' '[:lower:]')
-
-    IFS='|' read -ra requested <<< "$normalized"
-
-    mapfile -t nixpkgs_list < <(list_available_packages_lower)
-    mapfile -t current_lock < <(read_lock_entries)
-
-    for pkg in "${requested[@]}"; do
-      [[ -z "$pkg" ]] && continue
-
-      if package_exists "$pkg" nixpkgs_list; then
-        echo "✓ exact: $pkg"
-        current_lock+=("$pkg")
-      else
-        echo "✗ not found: $pkg"
-        handle_missing_package "$pkg" nixpkgs_list current_lock
-      fi
-    done
-
-    printf '%s\n' "${current_lock[@]}" | sort -u > "$LOCK_FILE"
-    echo "$BUILT_MARKER" >> "$LOCK_FILE"
-
-    echo
-    read -p "Import finished. Rebuild now? [Y/n/m]: " answer
-
-    case "${answer,,}" in
-      ""|"y")
-        generate_modules
-        regenerate_hub
-        run_rebuild
-        return
-        ;;
-      m)
-        read -p "Enter next file path: " file
-        continue
-        ;;
-      *)
-        echo "Import complete. No rebuild triggered."
-        return
-        ;;
-    esac
+  [[ -z "$file" || ! -f "$file" ]] && { echo "Provide a valid text file."; return 1; }
+  # Parse file, normalize, and present interactive selection
+  normalized=$(tr ',\n ' '|||' < "$file" | tr -s '|' | sed 's/^|//;s/|$//' | tr '[:upper:]' '[:lower:]')
+  IFS='|' read -ra requested <<< "$normalized"
+  mapfile -t nixpkgs_list < <(list_available_packages_lower)
+  valid_pkgs=()
+  for pkg in "${requested[@]}"; do
+    [[ -z "$pkg" ]] && continue
+    if package_exists "$pkg"; then
+      valid_pkgs+=("$pkg")
+    elif is_attrset "$pkg"; then
+      mapfile -t variants < <(list_attrset_children "$pkg")
+      for v in "${variants[@]}"; do
+        valid_pkgs+=("$pkg.$v")
+      done
+    fi
   done
+  # Interactive selection for import
+  selected=$(printf '%s\n' "${valid_pkgs[@]}" | fzf --multi --prompt="IMPORT> " --preview 'get_pkg_description {}')
+  [[ -z "$selected" ]] && { echo "Nothing selected."; return 1; }
+  # Add to lock
+  mapfile -t current_lock < <(read_lock_entries)
+  for pkg in $selected; do
+    grep -qx "$pkg" "$LOCK_FILE" || current_lock+=("$pkg")
+  done
+  printf '%s\n' "${current_lock[@]}" | sort -u > "$LOCK_FILE"
+  echo "$BUILT_MARKER" >> "$LOCK_FILE"
+  echo
+  read -p "Import finished. Run full pipeline (all)? [y/N]: " answer
+  case "${answer,,}" in
+    y)
+      select_packages
+      generate_modules
+      regenerate_hub
+      run_rebuild
+      ;;
+    *)
+      echo "Import complete. No full pipeline triggered."
+      ;;
+  esac
 }
 
 scan_managed_modules() {

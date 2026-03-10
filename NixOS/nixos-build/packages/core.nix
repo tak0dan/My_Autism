@@ -6,6 +6,8 @@ with pkgs; [
   pipewire
   starship
   git
+  bash
+  #libsForQt5.qtmultimedia
   gh
   wget
   htop

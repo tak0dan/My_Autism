@@ -10,7 +10,7 @@ with pkgs; [
   kdePackages.kdeplasma-addons
   kdePackages.plasma-workspace
   kdePackages.plasma-integration
-  libsForQt5.qt5ct
+  #libsForQt5.qt5ct
   nwg-look
   qt6Packages.qt6ct
   kdePackages.konsole

@@ -16,6 +16,7 @@ eclipses.eclipse-sdk
 flatpak
 gtk-pipe-viewer
 krita
+libsForQt5.qtmultimedia
 nano
 nodejs
 pnpm

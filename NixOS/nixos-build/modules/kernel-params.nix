@@ -47,4 +47,16 @@
   ############################
 
   hardware.enableRedistributableFirmware = true;
+
+
+    ############################
+    # Virtualisation (VirtualBox)
+    ############################
+
+#    virtualisation.virtualbox.host = {
+#      enable = true;
+#      enableExtensionPack = true;
+#    };
+
+#    users.users.tak_1.extraGroups = [ "vboxusers" ];
 }

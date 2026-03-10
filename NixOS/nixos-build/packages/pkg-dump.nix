@@ -5,12 +5,17 @@ with pkgs; [
   htop
   bat
   socat
+  p7zip
   bottom
+  wine
   eza
   fzf
+  nettools  
   git
+  pacman
   swaynotificationcenter
   yazi
+  virtualbox
   btop
   nmap
   swww

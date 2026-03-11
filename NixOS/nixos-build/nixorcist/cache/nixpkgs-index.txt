@@ -1,6 +1,3 @@
-eclipses|
-eclipses.eclipse-java|Eclipse Java IDE
-eclipses.eclipse-cpp|Eclipse C++ IDE
+nano|Nano editor
 swaync.package|Sway notification center package
 swaync.package.service|Sway notification center service
-nano|Nano editor

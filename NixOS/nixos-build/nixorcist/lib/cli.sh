@@ -39,6 +39,10 @@ show_section_header() {
   show_divider
 }
 
+show_section() {
+  show_section_header "$1"
+}
+
 show_status_line() {
   local label="$1"
   local value="${2:-}"
@@ -64,6 +68,12 @@ show_success() {
 show_info() {
   local msg="$1"
   printf '\n  ℹ %s\n' "$msg"
+}
+
+show_item() {
+  local prefix="$1"
+  local msg="$2"
+  printf '  %s %s\n' "$prefix" "$msg"
 }
 
 show_warning() {

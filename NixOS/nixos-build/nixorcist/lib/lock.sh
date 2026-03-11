@@ -33,6 +33,8 @@ transaction_init() {
   declare -gA TX_ADD=()
   declare -gA TX_REMOVE=()
   declare -gA TX_LOCK=()
+  declare -gA TX_QUERY_ADD=()
+  declare -gA TX_QUERY_REMOVE=()
   TX_FILE="$(mktemp /tmp/nixorcist-transaction.XXXXXX)"
 
   local pkg
@@ -40,6 +42,76 @@ transaction_init() {
     [[ -z "$pkg" ]] && continue
     TX_LOCK["$pkg"]=1
   done < <(read_lock_entries)
+}
+
+transaction_has_query() {
+  [[ ${#TX_QUERY_ADD[@]} -gt 0 || ${#TX_QUERY_REMOVE[@]} -gt 0 ]]
+}
+
+transaction_add_to_query() {
+  local mode="$1"
+  local token="$2"
+
+  token="$(sanitize_token "$token")"
+  [[ -z "$token" ]] && return 0
+  if ! is_valid_token "$token"; then
+    show_error "Invalid token: $token"
+    return 1
+  fi
+
+  if [[ "$mode" == "add" ]]; then
+    TX_QUERY_ADD["$token"]=1
+    unset TX_QUERY_REMOVE["$token"] 2>/dev/null || true
+  else
+    TX_QUERY_REMOVE["$token"]=1
+    unset TX_QUERY_ADD["$token"] 2>/dev/null || true
+  fi
+
+  return 0
+}
+
+transaction_stage_query() {
+  local item
+  local had_error=0
+
+  TX_ADD=()
+  TX_REMOVE=()
+
+  for item in "${!TX_QUERY_ADD[@]}"; do
+    transaction_expand_and_stage add "$item" || had_error=1
+  done
+
+  for item in "${!TX_QUERY_REMOVE[@]}"; do
+    transaction_expand_and_stage remove "$item" || had_error=1
+  done
+
+  if [[ $had_error -ne 0 ]]; then
+    show_warning 'Some query items could not be resolved. Review preview before applying.'
+  fi
+}
+
+transaction_preview_query() {
+  local total_add=${#TX_QUERY_ADD[@]}
+  local total_remove=${#TX_QUERY_REMOVE[@]}
+
+  printf '  Query Summary\n'
+  show_divider
+  printf '  Add Query:    %d item(s)\n' "$total_add"
+  if [[ $total_add -gt 0 ]]; then
+    printf '%s\n' "${!TX_QUERY_ADD[@]}" | sort -u | head -20 | while IFS= read -r item; do
+      printf '    + %s\n' "$item"
+    done
+    [[ $total_add -gt 20 ]] && printf '    ... and %d more\n' $((total_add - 20))
+  fi
+  echo
+  printf '  Remove Query: %d item(s)\n' "$total_remove"
+  if [[ $total_remove -gt 0 ]]; then
+    printf '%s\n' "${!TX_QUERY_REMOVE[@]}" | sort -u | head -20 | while IFS= read -r item; do
+      printf '    - %s\n' "$item"
+    done
+    [[ $total_remove -gt 20 ]] && printf '    ... and %d more\n' $((total_remove - 20))
+  fi
+  echo
 }
 
 transaction_cleanup() {
@@ -207,49 +279,79 @@ transaction_pick_for_remove() {
 
 transaction_unstage_menu() {
   local mode="$1"
+  local scope="${2:-staged}"
   local selected
+  local -n bucket_ref
 
   if [[ "$mode" == "add" ]]; then
-    [[ ${#TX_ADD[@]} -eq 0 ]] && { show_info "No staged installs."; return; }
-    selected=$(printf '%s\n' "${!TX_ADD[@]}" | sort -u | fzf --multi --prompt="UNSTAGE > ")
+    if [[ "$scope" == "query" ]]; then
+      bucket_ref=TX_QUERY_ADD
+    else
+      bucket_ref=TX_ADD
+    fi
+  else
+    if [[ "$scope" == "query" ]]; then
+      bucket_ref=TX_QUERY_REMOVE
+    else
+      bucket_ref=TX_REMOVE
+    fi
+  fi
+
+  if [[ "$mode" == "add" ]]; then
+    [[ ${#bucket_ref[@]} -eq 0 ]] && { show_info "No items in add queue."; return; }
+    selected=$(printf '%s\n' "${!bucket_ref[@]}" | sort -u | fzf --multi --prompt="UNSTAGE > ")
     [[ -z "$selected" ]] && return
     while IFS= read -r pkg; do
       [[ -z "$pkg" ]] && continue
-      unset TX_ADD["$pkg"]
+      unset bucket_ref["$pkg"]
     done <<< "$selected"
   else
-    [[ ${#TX_REMOVE[@]} -eq 0 ]] && { show_info "No staged removals."; return; }
-    selected=$(printf '%s\n' "${!TX_REMOVE[@]}" | sort -u | fzf --multi --prompt="UNSTAGE > ")
+    [[ ${#bucket_ref[@]} -eq 0 ]] && { show_info "No items in remove queue."; return; }
+    selected=$(printf '%s\n' "${!bucket_ref[@]}" | sort -u | fzf --multi --prompt="UNSTAGE > ")
     [[ -z "$selected" ]] && return
     while IFS= read -r pkg; do
       [[ -z "$pkg" ]] && continue
-      unset TX_REMOVE["$pkg"]
+      unset bucket_ref["$pkg"]
     done <<< "$selected"
   fi
 }
 
 transaction_submenu_install_queue() {
+  local use_query=1
+  if ! transaction_has_query && [[ ${#TX_ADD[@]} -gt 0 || ${#TX_REMOVE[@]} -gt 0 ]]; then
+    use_query=0
+  fi
+
   while true; do
     clear
     show_logo
     show_section_header 'Manage Install Queue'
     
-    if [[ ${#TX_ADD[@]} -eq 0 ]]; then
+    if [[ $use_query -eq 1 && ${#TX_QUERY_ADD[@]} -eq 0 ]]; then
+      printf '  (empty)\n'
+    elif [[ $use_query -eq 0 && ${#TX_ADD[@]} -eq 0 ]]; then
       printf '  (empty)\n'
     else
-      printf '  Staged for installation:\n\n'
-      printf '%s\n' "${!TX_ADD[@]}" | sort -u | nl | while read -r num pkg; do
-        printf '    %2d. %s\n' "$num" "$pkg"
-      done | head -20
-      
-      local total=${#TX_ADD[@]}
+      if [[ $use_query -eq 1 ]]; then
+        printf '  Draft install query:\n\n'
+        printf '%s\n' "${!TX_QUERY_ADD[@]}" | sort -u | nl | while read -r num pkg; do
+          printf '    %2d. %s\n' "$num" "$pkg"
+        done | head -20
+        local total=${#TX_QUERY_ADD[@]}
+      else
+        printf '  Staged for installation:\n\n'
+        printf '%s\n' "${!TX_ADD[@]}" | sort -u | nl | while read -r num pkg; do
+          printf '    %2d. %s\n' "$num" "$pkg"
+        done | head -20
+        local total=${#TX_ADD[@]}
+      fi
       if [[ $total -gt 20 ]]; then
         printf '\n    ... and %d more\n' $((total - 20))
       fi
     fi
     
     echo
-    show_menu_item '1' 'Remove from queue    - select packages to unstage'
+    show_menu_item '1' 'Remove from queue    - select items to unstage'
     show_menu_item '2' 'Clear all            - empty the install queue'
     show_menu_item '0' 'Back'
     echo
@@ -259,26 +361,50 @@ transaction_submenu_install_queue() {
     
     case "$choice" in
       1)
-        if [[ ${#TX_ADD[@]} -eq 0 ]]; then
-          show_error 'Install queue is empty'
-          wait_for_key
+        if [[ $use_query -eq 1 ]]; then
+          if [[ ${#TX_QUERY_ADD[@]} -eq 0 ]]; then
+            show_error 'Install queue is empty'
+            wait_for_key
+          else
+            transaction_unstage_menu add query
+          fi
         else
-          transaction_unstage_menu add
+          if [[ ${#TX_ADD[@]} -eq 0 ]]; then
+            show_error 'Install queue is empty'
+            wait_for_key
+          else
+            transaction_unstage_menu add staged
+          fi
         fi
         ;;
       2)
-        if [[ ${#TX_ADD[@]} -eq 0 ]]; then
-          show_error 'Install queue is empty'
-          wait_for_key
+        if [[ $use_query -eq 1 ]]; then
+          if [[ ${#TX_QUERY_ADD[@]} -eq 0 ]]; then
+            show_error 'Install queue is empty'
+            wait_for_key
+          else
+            show_warning 'This will clear all query installs.'
+            show_yes_no_prompt 'Continue?'
+            read -r confirm
+            if [[ "${confirm,,}" == "y" ]]; then
+              TX_QUERY_ADD=()
+              show_success 'Install query cleared'
+              sleep 1
+            fi
+          fi
         else
-          show_warning 'This will clear all staged installs.'
-          show_yes_no_prompt 'Continue?'
-          read -r confirm
-          
-          if [[ "${confirm,,}" == "y" ]]; then
-            TX_ADD=()
-            show_success 'Install queue cleared'
-            sleep 1
+          if [[ ${#TX_ADD[@]} -eq 0 ]]; then
+            show_error 'Install queue is empty'
+            wait_for_key
+          else
+            show_warning 'This will clear all staged installs.'
+            show_yes_no_prompt 'Continue?'
+            read -r confirm
+            if [[ "${confirm,,}" == "y" ]]; then
+              TX_ADD=()
+              show_success 'Install queue cleared'
+              sleep 1
+            fi
           fi
         fi
         ;;
@@ -292,27 +418,41 @@ transaction_submenu_install_queue() {
 }
 
 transaction_submenu_remove_queue() {
+  local use_query=1
+  if ! transaction_has_query && [[ ${#TX_ADD[@]} -gt 0 || ${#TX_REMOVE[@]} -gt 0 ]]; then
+    use_query=0
+  fi
+
   while true; do
     clear
     show_logo
     show_section_header 'Manage Remove Queue'
     
-    if [[ ${#TX_REMOVE[@]} -eq 0 ]]; then
+    if [[ $use_query -eq 1 && ${#TX_QUERY_REMOVE[@]} -eq 0 ]]; then
+      printf '  (empty)\n'
+    elif [[ $use_query -eq 0 && ${#TX_REMOVE[@]} -eq 0 ]]; then
       printf '  (empty)\n'
     else
-      printf '  Staged for removal:\n\n'
-      printf '%s\n' "${!TX_REMOVE[@]}" | sort -u | nl | while read -r num pkg; do
+      if [[ $use_query -eq 1 ]]; then
+        printf '  Draft remove query:\n\n'
+        printf '%s\n' "${!TX_QUERY_REMOVE[@]}" | sort -u | nl | while read -r num pkg; do
+          printf '    %2d. %s\n' "$num" "$pkg"
+        done | head -20
+        local total=${#TX_QUERY_REMOVE[@]}
+      else
+        printf '  Staged for removal:\n\n'
+        printf '%s\n' "${!TX_REMOVE[@]}" | sort -u | nl | while read -r num pkg; do
         printf '    %2d. %s\n' "$num" "$pkg"
       done | head -20
-      
-      local total=${#TX_REMOVE[@]}
+        local total=${#TX_REMOVE[@]}
+      fi
       if [[ $total -gt 20 ]]; then
         printf '\n    ... and %d more\n' $((total - 20))
       fi
     fi
     
     echo
-    show_menu_item '1' 'Remove from queue    - select packages to unstage'
+    show_menu_item '1' 'Remove from queue    - select items to unstage'
     show_menu_item '2' 'Clear all            - empty the remove queue'
     show_menu_item '0' 'Back'
     echo
@@ -322,26 +462,50 @@ transaction_submenu_remove_queue() {
     
     case "$choice" in
       1)
-        if [[ ${#TX_REMOVE[@]} -eq 0 ]]; then
-          show_error 'Remove queue is empty'
-          wait_for_key
+        if [[ $use_query -eq 1 ]]; then
+          if [[ ${#TX_QUERY_REMOVE[@]} -eq 0 ]]; then
+            show_error 'Remove queue is empty'
+            wait_for_key
+          else
+            transaction_unstage_menu remove query
+          fi
         else
-          transaction_unstage_menu remove
+          if [[ ${#TX_REMOVE[@]} -eq 0 ]]; then
+            show_error 'Remove queue is empty'
+            wait_for_key
+          else
+            transaction_unstage_menu remove staged
+          fi
         fi
         ;;
       2)
-        if [[ ${#TX_REMOVE[@]} -eq 0 ]]; then
-          show_error 'Remove queue is empty'
-          wait_for_key
+        if [[ $use_query -eq 1 ]]; then
+          if [[ ${#TX_QUERY_REMOVE[@]} -eq 0 ]]; then
+            show_error 'Remove queue is empty'
+            wait_for_key
+          else
+            show_warning 'This will clear all query removals.'
+            show_yes_no_prompt 'Continue?'
+            read -r confirm
+            if [[ "${confirm,,}" == "y" ]]; then
+              TX_QUERY_REMOVE=()
+              show_success 'Remove query cleared'
+              sleep 1
+            fi
+          fi
         else
-          show_warning 'This will clear all staged removals.'
-          show_yes_no_prompt 'Continue?'
-          read -r confirm
-          
-          if [[ "${confirm,,}" == "y" ]]; then
-            TX_REMOVE=()
-            show_success 'Remove queue cleared'
-            sleep 1
+          if [[ ${#TX_REMOVE[@]} -eq 0 ]]; then
+            show_error 'Remove queue is empty'
+            wait_for_key
+          else
+            show_warning 'This will clear all staged removals.'
+            show_yes_no_prompt 'Continue?'
+            read -r confirm
+            if [[ "${confirm,,}" == "y" ]]; then
+              TX_REMOVE=()
+              show_success 'Remove queue cleared'
+              sleep 1
+            fi
           fi
         fi
         ;;
@@ -355,8 +519,13 @@ transaction_submenu_remove_queue() {
 }
 show_transaction_header() {
   show_section_header 'Transaction Builder'
-  printf '  %-45s %s\n' "Queued to Install:" "${#TX_ADD[@]} package(s)"
-  printf '  %-45s %s\n' "Queued to Remove:" "${#TX_REMOVE[@]} package(s)"
+  if transaction_has_query; then
+    printf '  %-45s %s\n' "Query Install Items:" "${#TX_QUERY_ADD[@]} item(s)"
+    printf '  %-45s %s\n' "Query Remove Items:" "${#TX_QUERY_REMOVE[@]} item(s)"
+  else
+    printf '  %-45s %s\n' "Queued to Install:" "${#TX_ADD[@]} package(s)"
+    printf '  %-45s %s\n' "Queued to Remove:" "${#TX_REMOVE[@]} package(s)"
+  fi
   echo
   show_divider
   echo
@@ -372,12 +541,12 @@ transaction_menu_loop_tty() {
     show_transaction_header
     show_status_line "Use numbers and Enter to navigate."
     echo
-    show_menu_item '1' 'Add packages        - browse and queue installs'
-    show_menu_item '2' 'Remove packages     - browse and queue removals'
+    show_menu_item '1' 'Add packages        - add items to install query'
+    show_menu_item '2' 'Remove packages     - add items to remove query'
     show_menu_item '3' 'Manage install queue'
     show_menu_item '4' 'Manage remove queue'
     show_menu_item '5' 'Preview changes'
-    show_menu_item '6' 'Apply changes'
+    show_menu_item '6' 'Install query       - stage query and apply lock changes'
     show_menu_item '0' 'Cancel'
     echo
     show_input_prompt 'Select an option (0-6):'
@@ -389,9 +558,9 @@ transaction_menu_loop_tty() {
         [[ -z "$selected" ]] && continue
         while IFS= read -r item; do
           [[ -z "$item" ]] && continue
-          transaction_expand_and_stage add "$item" || true
+          transaction_add_to_query add "$item" || true
         done <<< "$selected"
-        show_success 'Addition complete'
+        show_success 'Added to install query'
         sleep 1
         ;;
       2)
@@ -399,9 +568,9 @@ transaction_menu_loop_tty() {
         [[ -z "$selected" ]] && continue
         while IFS= read -r item; do
           [[ -z "$item" ]] && continue
-          transaction_expand_and_stage remove "$item" || true
+          transaction_add_to_query remove "$item" || true
         done <<< "$selected"
-        show_success 'Removal staged'
+        show_success 'Added to remove query'
         sleep 1
         ;;
       3)
@@ -415,17 +584,28 @@ transaction_menu_loop_tty() {
         show_logo
         show_section_header 'Transaction Preview'
         echo
-        transaction_preview
+        if transaction_has_query; then
+          transaction_preview_query
+        else
+          transaction_preview
+        fi
         wait_for_key
         ;;
       6)
         clear
         show_logo
-        show_section_header 'Apply Transaction'
-        show_warning 'This will update the lock file with staged changes.'
+        show_section_header 'Install Query'
+        if transaction_has_query; then
+          show_warning 'This will resolve your query, stage packages, and update the lock file.'
+        else
+          show_warning 'This will update the lock file with staged changes.'
+        fi
         show_yes_no_prompt 'Continue?'
         read -r confirm
         if [[ "${confirm,,}" == "y" ]]; then
+          if transaction_has_query; then
+            transaction_stage_query
+          fi
           transaction_apply
           return 0
         fi

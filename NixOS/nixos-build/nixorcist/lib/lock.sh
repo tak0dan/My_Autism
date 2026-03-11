@@ -572,23 +572,23 @@ transaction_pick_from_index() {
 
     if [[ -n "$owner_line" ]]; then
       fzf_out="$(_render_index_rows | fzf --ansi --multi \
-        --expect=enter,s,S,ctrl-o \
+        --expect=enter,ctrl-o \
         --print-query \
         --delimiter=$'\t' \
         --with-nth=2 \
         --bind "start:pos($owner_line)+toggle" \
         --prompt="SELECT> " \
-        --header="TAB mark | ENTER confirm | Shift+S/ctrl-o or OWNER SEARCH row for menu B" \
+        --header="TAB mark | ENTER confirm | ctrl-o or OWNER SEARCH row for menu B" \
         --preview "$(_fzf_pkg_preview_cmd)" \
         --preview-window=down:6:wrap)" || return 1
     else
       fzf_out="$(_render_index_rows | fzf --ansi --multi \
-        --expect=enter,s,S,ctrl-o \
+        --expect=enter,ctrl-o \
         --print-query \
         --delimiter=$'\t' \
         --with-nth=2 \
         --prompt="SELECT> " \
-        --header="TAB mark | ENTER confirm | Shift+S/ctrl-o or OWNER SEARCH row for menu B" \
+        --header="TAB mark | ENTER confirm | ctrl-o or OWNER SEARCH row for menu B" \
         --preview "$(_fzf_pkg_preview_cmd)" \
         --preview-window=down:6:wrap)" || return 1
     fi
@@ -618,7 +618,7 @@ transaction_pick_from_index() {
       fi
     fi
 
-    if [[ "$key" == "S" || "$key" == "s" || "$key" == "ctrl-o" || "$key" == "OWNER_ACTION" ]]; then
+    if [[ "$key" == "ctrl-o" || "$key" == "OWNER_ACTION" ]]; then
       needle="$(sanitize_token "$query")"
       if [[ -z "$needle" && ${#selected_pkgs[@]} -gt 0 ]]; then
         needle="${selected_pkgs[0]}"

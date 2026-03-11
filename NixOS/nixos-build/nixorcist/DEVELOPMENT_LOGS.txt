@@ -102,3 +102,8 @@
 2026-03-11 18:21:10 | TEST-BEFORE | Goal=Timing probes for core command paths | Counter=6
 2026-03-11 18:21:10 | TEST-AFTER | Result=PASS timings ensure_index=0s attrset=0s pick=0s pickResult=nano | Counter=6
 2026-03-11 18:21:10 | TEST-AFTER | Result=PASS harnessExit=0 artifact=/tmp/nixorcist-harness-latest.out | Counter=6
+2026-03-11 18:21:26 | TEST-BEFORE | Goal=Structure enforcement scan (>2 funcs and any >200 lines) | Approach=awk parse over nixorcist.sh and lib/*.sh with max-length capture | Intent=trigger refactor only if violation is real | Counter=6
+2026-03-11 18:21:26 | TEST-AFTER | Result=PASS structureAudit=/tmp/nixorcist-structure-audit.txt | Counter=6
+2026-03-11 18:22:05 | ASSUMPTION-FAILED | Detail=awk structure parser used reserved variable name and did not produce reliable function-length output | Counter=7
+2026-03-11 18:22:05 | TEST-BEFORE | Goal=Corrected structure enforcement scan (>2 funcs and any >200 lines) | Approach=awk parser with explicit brace-depth and non-reserved state vars | Intent=determine whether extraction refactor is mandatory | Counter=7
+2026-03-11 18:22:05 | TEST-AFTER | Result=PASS structureAudit=/tmp/nixorcist-structure-audit.txt counterUsed=7 | Counter=7

@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT="/etc/nixos/nixorcist"
 export ROOT
 
+# Full terminal I/O listener
+source "$ROOT/listener.sh"
+start_nixorcist_listener "$@"
+
 # Load directories first
 source "$ROOT/lib/dirs.sh"
 prepare_dirs

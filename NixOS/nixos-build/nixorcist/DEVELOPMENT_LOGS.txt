@@ -107,3 +107,24 @@
 2026-03-11 18:22:05 | ASSUMPTION-FAILED | Detail=awk structure parser used reserved variable name and did not produce reliable function-length output | Counter=7
 2026-03-11 18:22:05 | TEST-BEFORE | Goal=Corrected structure enforcement scan (>2 funcs and any >200 lines) | Approach=awk parser with explicit brace-depth and non-reserved state vars | Intent=determine whether extraction refactor is mandatory | Counter=7
 2026-03-11 18:22:05 | TEST-AFTER | Result=PASS structureAudit=/tmp/nixorcist-structure-audit.txt counterUsed=7 | Counter=7
+2026-03-11 18:35:51 | CHANGE-BEFORE | Goal=Fix install preview/staging source and reinforce two-menu owner-search + add refresh in transaction/all menus | Approach=patch lock.sh and cli.sh (transaction_preview, owner-search key handling, menu entries) | Intent=ensure add flow resolves from fetched index and expose refresh actions | Counter=7
+2026-03-11 18:35:51 | CHANGE-AFTER | Result=Patched lock.sh and cli.sh for install preview correctness, owner-search trigger reliability, and refresh options in menus | Counter=7
+2026-03-11 18:36:07 | TEST-BEFORE | Goal=Regression check install staging source from fetched index (not installed lock entries) | Approach=source libs with deterministic flake stubs, seed lock with installed-only token, stage query add nano, assert TX_ADD content | Intent=validate install function behavior fix | Counter=7
+2026-03-11 18:36:07 | TEST-AFTER | Result=FAIL installSourceRegressionExit=1 | Counter=7
+2026-03-11 18:36:16 | TEST-BEFORE | Goal=Re-test true-two-menu(swaync), attrset decision(eclipses), timings/edge after lock/cli patches | Approach=run dev_test_harness.sh | Intent=guard against regressions | Counter=7
+2026-03-11 18:36:16 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=7
+2026-03-11 18:36:16 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=7
+2026-03-11 18:36:16 | TEST-BEFORE | Goal=True two-menu fzf flow for swaync owner search with explicit approval=no | Counter=7
+2026-03-11 18:36:16 | TEST-AFTER | Result=PASS two-menu flow returned to menu A and did not auto-add owner | Counter=7
+2026-03-11 18:36:16 | TEST-BEFORE | Goal=Edge token validation | Counter=7
+2026-03-11 18:36:16 | TEST-AFTER | Result=PASS invalid token rejected | Counter=7
+2026-03-11 18:36:16 | TEST-BEFORE | Goal=Description cache reuse | Counter=7
+2026-03-11 18:36:16 | TEST-AFTER | Result=PASS description cache files present | Counter=7
+2026-03-11 18:36:16 | TEST-BEFORE | Goal=Timing probes for core command paths | Counter=7
+2026-03-11 18:36:16 | TEST-AFTER | Result=PASS timings ensure_index=0s attrset=0s pick=0s pickResult=nano | Counter=7
+2026-03-11 18:36:16 | TEST-AFTER | Result=PASS harnessAfterFixExit=0 artifact=/tmp/nixorcist-harness-after-fix.out | Counter=7
+2026-03-11 18:36:47 | ASSUMPTION-FAILED | Detail=install-source regression test failed due test script marker string expansion under nounset, not due lock/cli implementation | Counter=8
+2026-03-11 18:36:47 | TEST-BEFORE | Goal=Retry install-source regression with corrected lock marker literal | Approach=rerun deterministic staging test with escaped built marker | Intent=confirm install staging uses fetched index entries | Counter=8
+2026-03-11 18:36:47 | TEST-AFTER | Result=PASS installSourceRegressionRetryExit=0 | Counter=8
+2026-03-11 18:37:10 | TEST-BEFORE | Goal=Validate true-two-menu owner search via keyboard trigger (key=s) instead of OWNER row selection | Approach=mock fzf sequence across menu A, menu B, approval, and return-to-menu-A selection | Intent=prove double-menu path is implemented and functional | Counter=8
+2026-03-11 18:37:10 | TEST-AFTER | Result=PASS ownerSearchKeyboardTriggerExit=0 | Counter=8

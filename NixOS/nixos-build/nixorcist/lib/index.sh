@@ -270,36 +270,7 @@ _index_source_b() {
 
 _index_source_c() {
   local out_file="$1"
-  nix eval --impure --raw --expr '
-    let
-      flake = builtins.getFlake "flake:nixpkgs";
-      pkgs = flake.legacyPackages.${builtins.currentSystem};
-
-      walk = depth: prefix: attrs:
-        if depth > 2 || !(builtins.isAttrs attrs) then
-          []
-        else
-          builtins.concatLists (map (name:
-            let
-              path = if prefix == "" then name else prefix + "." + name;
-              valueEval = builtins.tryEval attrs.${name};
-            in
-              if !valueEval.success then
-                []
-              else
-                let
-                  value = valueEval.value;
-                  isAttrs = builtins.isAttrs value;
-                  isDrv = isAttrs && (value.type or null) == "derivation";
-                  desc = if isDrv then (value.meta.description or "") else "";
-                  line = [ (path + "|" + desc) ];
-                  next = if isAttrs && !isDrv then walk (depth + 1) path value else [];
-                in
-                  line ++ next
-          ) (builtins.attrNames attrs));
-    in
-      builtins.concatStringsSep "\n" (walk 0 "" pkgs)
-  ' > "$out_file" 2>/dev/null
+  : > "$out_file"
 }
 
 build_nix_index() {

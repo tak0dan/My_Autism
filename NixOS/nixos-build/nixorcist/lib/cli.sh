@@ -375,14 +375,15 @@ direct_commands_menu() {
       6)
         clear_screen
         show_logo
-        show_section_header 'All + Refresh'
-        printf '  Refreshing package index and running full pipeline...\n\n'
+        show_section_header 'Full Build with Refresh'
+        printf '  Refreshing package index, then running full pipeline...\n\n'
         build_nix_index && generate_modules && regenerate_hub && run_rebuild
+        show_success 'Full build with refresh completed.'
         wait_for_key
         ;;
       0) break ;;
       *)
-        show_error 'Invalid option. Please choose a number between 0 and 5.'
+        show_error 'Invalid option. Please choose a number between 0 and 6.'
         wait_for_key
         ;;
     esac

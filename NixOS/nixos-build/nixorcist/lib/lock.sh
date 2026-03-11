@@ -103,6 +103,7 @@ _collect_attrset_recursive_for_query() {
   local attrset="$1"
   local depth="${2:-0}"
   local -n out_ref=$3
+  local out_ref_name="${!out_ref}"
   local children="" child="" full=""
 
   if [[ "$depth" -gt 5 ]]; then
@@ -117,7 +118,7 @@ _collect_attrset_recursive_for_query() {
     [[ -z "$child" ]] && continue
     full="$attrset.$child"
     if _entry_should_prompt_as_attrset "$full"; then
-      _collect_attrset_recursive_for_query "$full" $(( depth + 1 )) out_ref || true
+      _collect_attrset_recursive_for_query "$full" $(( depth + 1 )) "$out_ref_name" || true
     elif [[ "$(get_pkg_type "$full")" == "package" ]]; then
       out_ref["$full"]=1
     fi
@@ -129,6 +130,7 @@ _collect_attrset_recursive_for_query() {
 _resolve_attrset_for_query() {
   local attrset="$1"
   local -n out_ref=$2
+  local out_ref_name="${!out_ref}"
   local pkg_count="" raw_choice="" first_char="" child="" full="" child_type=""
   local selected=""
   local resolved=()
@@ -188,7 +190,7 @@ _resolve_attrset_for_query() {
         [[ -z "$child" ]] && continue
         full="$attrset.$child"
         if _entry_should_prompt_as_attrset "$full"; then
-          _resolve_attrset_for_query "$full" out_ref || true
+          _resolve_attrset_for_query "$full" "$out_ref_name" || true
           continue
         fi
 
@@ -202,7 +204,7 @@ _resolve_attrset_for_query() {
       return 0
       ;;
     a)
-      if _collect_attrset_recursive_for_query "$attrset" 0 out_ref && [[ ${#out_ref[@]} -gt 0 ]]; then
+      if _collect_attrset_recursive_for_query "$attrset" 0 "$out_ref_name" && [[ ${#out_ref[@]} -gt 0 ]]; then
         show_item "✓" "Recursively selected packages under $attrset"
         return 0
       fi
@@ -219,12 +221,13 @@ _resolve_attrset_for_query() {
 transaction_resolve_token_for_query() {
   local token="$1"
   local -n out_ref=$2
+  local out_ref_name="${!out_ref}"
 
   token="$(sanitize_token "$token")"
   [[ -z "$token" ]] && return 1
 
   if _entry_should_prompt_as_attrset "$token"; then
-    _resolve_attrset_for_query "$token" out_ref
+    _resolve_attrset_for_query "$token" "$out_ref_name"
     return $?
   fi
 

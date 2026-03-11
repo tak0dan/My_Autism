@@ -16,8 +16,13 @@ for lib in utils lock gen hub rebuild index; do
   source "$ROOT/lib/$lib.sh"
 done
 
+nixorcist_trace_init
+enable_nixorcist_trace
+trap 'status=$?; nixorcist_trace "EXIT" "main status=$status"' EXIT
+
 main() {
   local command="${1:-help}"
+  nixorcist_trace "ARGS" "argv=$*"
 
   case "$command" in
     transaction)

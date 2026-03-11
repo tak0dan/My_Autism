@@ -6,6 +6,57 @@ clear_screen() {
   clear
 }
 
+# Set to 0 (or comment out enable call in nixorcist.sh) to disable tracing.
+NIXORCIST_TRACE_ENABLED="${NIXORCIST_TRACE_ENABLED:-1}"
+NIXORCIST_TRACE_FILE="${NIXORCIST_TRACE_FILE:-${ROOT:-.}/nixorcist-trace.txt}"
+NIXORCIST_TRACE_GUARD=0
+
+nixorcist_trace_init() {
+  [[ "${NIXORCIST_TRACE_ENABLED}" == "1" ]] || return 0
+  mkdir -p "$(dirname "$NIXORCIST_TRACE_FILE")" 2>/dev/null || true
+  touch "$NIXORCIST_TRACE_FILE" 2>/dev/null || true
+  printf '\n[%s] [SESSION] pid=%s user=%s pwd=%s\n' \
+    "$(date '+%Y-%m-%d %H:%M:%S')" "$$" "${USER:-unknown}" "${PWD:-unknown}" >> "$NIXORCIST_TRACE_FILE" 2>/dev/null || true
+}
+
+nixorcist_trace() {
+  local kind="$1"
+  local message="$2"
+  [[ "${NIXORCIST_TRACE_ENABLED}" == "1" ]] || return 0
+  printf '[%s] [%s] %s\n' \
+    "$(date '+%Y-%m-%d %H:%M:%S')" "$kind" "$message" >> "$NIXORCIST_TRACE_FILE" 2>/dev/null || true
+}
+
+nixorcist_trace_selection() {
+  local context="$1"
+  local value="${2:-}"
+  value="${value//$'\n'/\\n}"
+  nixorcist_trace "SELECT" "$context => ${value:-<empty>}"
+}
+
+nixorcist_trace_debug_command() {
+  [[ "${NIXORCIST_TRACE_ENABLED}" == "1" ]] || return 0
+  [[ "${NIXORCIST_TRACE_GUARD}" -eq 0 ]] || return 0
+
+  local cmd="${BASH_COMMAND:-}"
+  [[ -z "$cmd" ]] && return 0
+  case "$cmd" in
+    nixorcist_trace*|*nixorcist_trace_debug_command*|trap\ *DEBUG*)
+      return 0
+      ;;
+  esac
+
+  NIXORCIST_TRACE_GUARD=1
+  cmd="${cmd//$'\n'/ ; }"
+  nixorcist_trace "CMD" "$cmd"
+  NIXORCIST_TRACE_GUARD=0
+}
+
+enable_nixorcist_trace() {
+  [[ "${NIXORCIST_TRACE_ENABLED}" == "1" ]] || return 0
+  trap 'nixorcist_trace_debug_command' DEBUG
+}
+
 # Backward-compatible header helper used by nixorcist.sh command mode.
 show_header() {
   local title="$1"
@@ -84,6 +135,7 @@ show_warning() {
 wait_for_key() {
   printf '\n  Press ENTER to continue...'
   read -r
+  nixorcist_trace_selection "wait_for_key" "ENTER"
 }
 
 show_input_prompt() {
@@ -137,6 +189,7 @@ main_menu() {
     
     printf '  Select an option (0-5): '
     read -r choice
+    nixorcist_trace_selection "main_menu.choice" "$choice"
     
     case "$choice" in
       1) transaction_builder_flow ;;
@@ -180,6 +233,7 @@ transaction_builder_flow() {
     
     printf '  Select an option (0-2): '
     read -r choice
+    nixorcist_trace_selection "transaction_builder_flow.choice" "$choice"
     
     case "$choice" in
       1)
@@ -215,6 +269,7 @@ import_file_flow() {
   
   show_input_prompt 'Enter file path'
   read -r file_path
+  nixorcist_trace_selection "import_file_flow.file_path" "$file_path"
   
   if [[ -z "$file_path" ]]; then
     show_error 'File path cannot be empty.'

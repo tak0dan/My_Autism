@@ -8,12 +8,21 @@ BUILT_MARKER='#$built$#'
 
 read_lock_entries() {
   grep -v -F "$BUILT_MARKER" "$LOCK_FILE" 2>/dev/null \
-    | sed '/^[[:space:]]*$/d' | sort -u
+    | tr -d '\r' \
+    | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
+    | sed '/^[[:space:]]*$/d' \
+    | grep -E '^[a-zA-Z0-9._+-]+$' \
+    | sort -u
 }
 
 write_lock_entries() {
   local -n entries_ref=$1
-  printf '%s\n' "${entries_ref[@]}" | sed '/^[[:space:]]*$/d' | sort -u > "$LOCK_FILE"
+  printf '%s\n' "${entries_ref[@]}" \
+    | tr -d '\r' \
+    | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
+    | sed '/^[[:space:]]*$/d' \
+    | grep -E '^[a-zA-Z0-9._+-]+$' \
+    | sort -u > "$LOCK_FILE"
   echo "$BUILT_MARKER" >> "$LOCK_FILE"
 }
 

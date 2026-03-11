@@ -279,6 +279,30 @@ transaction_preview_query() {
   echo
 }
 
+transaction_preview() {
+  local total_add=${#TX_ADD[@]}
+  local total_remove=${#TX_REMOVE[@]}
+
+  printf '  Resolved Package Staging\n'
+  show_divider
+  printf '  To Install: %d package(s)\n' "$total_add"
+  if [[ $total_add -gt 0 ]]; then
+    printf '%s\n' "${!TX_ADD[@]}" | sort -u | head -40 | while IFS= read -r item; do
+      printf '    + %s\n' "$item"
+    done
+    [[ $total_add -gt 40 ]] && printf '    ... and %d more\n' $((total_add - 40))
+  fi
+  echo
+  printf '  To Remove:  %d package(s)\n' "$total_remove"
+  if [[ $total_remove -gt 0 ]]; then
+    printf '%s\n' "${!TX_REMOVE[@]}" | sort -u | head -40 | while IFS= read -r item; do
+      printf '    - %s\n' "$item"
+    done
+    [[ $total_remove -gt 40 ]] && printf '    ... and %d more\n' $((total_remove - 40))
+  fi
+  echo
+}
+
 transaction_cleanup() {
   [[ -n "${TX_FILE:-}" && -f "$TX_FILE" ]] && rm -f "$TX_FILE"
 }
@@ -548,23 +572,23 @@ transaction_pick_from_index() {
 
     if [[ -n "$owner_line" ]]; then
       fzf_out="$(_render_index_rows | fzf --ansi --multi \
-        --expect=enter,S \
+        --expect=enter,s,S,ctrl-o \
         --print-query \
         --delimiter=$'\t' \
         --with-nth=2 \
         --bind "start:pos($owner_line)+toggle" \
         --prompt="SELECT> " \
-        --header="TAB mark | ENTER confirm | select OWNER SEARCH row for menu B" \
+        --header="TAB mark | ENTER confirm | Shift+S/ctrl-o or OWNER SEARCH row for menu B" \
         --preview "$(_fzf_pkg_preview_cmd)" \
         --preview-window=down:6:wrap)" || return 1
     else
       fzf_out="$(_render_index_rows | fzf --ansi --multi \
-        --expect=enter,S \
+        --expect=enter,s,S,ctrl-o \
         --print-query \
         --delimiter=$'\t' \
         --with-nth=2 \
         --prompt="SELECT> " \
-        --header="TAB mark | ENTER confirm | select OWNER SEARCH row for menu B" \
+        --header="TAB mark | ENTER confirm | Shift+S/ctrl-o or OWNER SEARCH row for menu B" \
         --preview "$(_fzf_pkg_preview_cmd)" \
         --preview-window=down:6:wrap)" || return 1
     fi
@@ -594,7 +618,7 @@ transaction_pick_from_index() {
       fi
     fi
 
-    if [[ "$key" == "S" || "$key" == "OWNER_ACTION" ]]; then
+    if [[ "$key" == "S" || "$key" == "s" || "$key" == "ctrl-o" || "$key" == "OWNER_ACTION" ]]; then
       needle="$(sanitize_token "$query")"
       if [[ -z "$needle" && ${#selected_pkgs[@]} -gt 0 ]]; then
         needle="${selected_pkgs[0]}"
@@ -940,9 +964,10 @@ transaction_menu_loop_tty() {
     show_menu_item '4' 'Manage remove queue'
     show_menu_item '5' 'Preview changes'
     show_menu_item '6' 'Install query       - stage query and apply lock changes'
+    show_menu_item '7' 'Refresh index       - rebuild fetched package cache'
     show_menu_item '0' 'Cancel'
     echo
-    show_input_prompt 'Select an option (0-6):'
+    show_input_prompt 'Select an option (0-7):'
     read -r choice
     nixorcist_trace_selection "transaction_menu.choice" "$choice"
     
@@ -1016,6 +1041,14 @@ transaction_menu_loop_tty() {
           transaction_apply
           return 0
         fi
+        ;;
+      7)
+        clear
+        show_logo
+        show_section_header 'Refreshing Package Index'
+        build_nix_index
+        show_success 'Package index refreshed'
+        wait_for_key
         ;;
       0)
         clear

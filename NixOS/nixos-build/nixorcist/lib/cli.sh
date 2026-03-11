@@ -312,11 +312,12 @@ direct_commands_menu() {
     show_menu_item '3' 'Full Rebuild         - gen → hub → nixos-rebuild'
     show_menu_item '4' 'Purge All Modules    - Remove all generated modules'
     show_menu_item '5' 'Build NixOS Index    - Refresh package database'
+    show_menu_item '6' 'All + Refresh        - refresh index, then full rebuild'
     echo
     show_menu_item '0' 'Back to Main Menu'
     echo
     
-    printf '  Select an option (0-5): '
+    printf '  Select an option (0-6): '
     read -r choice
     
     case "$choice" in
@@ -371,9 +372,18 @@ direct_commands_menu() {
         show_success 'Package index built successfully.'
         wait_for_key
         ;;
+      6)
+        clear_screen
+        show_logo
+        show_section_header 'Full Build with Refresh'
+        printf '  Refreshing package index, then running full pipeline...\n\n'
+        build_nix_index && generate_modules && regenerate_hub && run_rebuild
+        show_success 'Full build with refresh completed.'
+        wait_for_key
+        ;;
       0) break ;;
       *)
-        show_error 'Invalid option. Please choose a number between 0 and 5.'
+        show_error 'Invalid option. Please choose a number between 0 and 6.'
         wait_for_key
         ;;
     esac

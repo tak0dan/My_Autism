@@ -91,6 +91,7 @@ show_input_prompt() {
   printf '\n  %s: ' "$prompt"
 }
 
+
 show_yes_no_prompt() {
   local question="$1"
   printf '\n  %s [y/n]: ' "$question"

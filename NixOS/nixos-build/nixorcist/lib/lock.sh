@@ -76,6 +76,8 @@ transaction_add_to_query() {
     unset TX_QUERY_ADD["$token"] 2>/dev/null || true
   fi
 
+  nixorcist_trace "QUERY" "mode=$mode token=$token"
+
   return 0
 }
 
@@ -147,6 +149,15 @@ transaction_expand_and_stage() {
   fi
 
   if ! resolve_entry_to_packages "$entry" resolved; then
+    if [[ "$mode" == "remove" ]]; then
+      # Removals should not depend on nixpkgs resolution. If a token exists
+      # in lock but is no longer resolvable, still remove it by raw key.
+      TX_REMOVE["$entry"]=1
+      unset TX_ADD["$entry"] 2>/dev/null || true
+      show_item "-" "Staged raw removal: $entry"
+      nixorcist_trace "REMOVE_FALLBACK" "raw_token=$entry"
+      return 0
+    fi
     show_error "Skipping empty/invalid: $entry"
     return 1
   fi
@@ -187,6 +198,7 @@ transaction_handle_attrset() {
 
   local raw_choice first_char
   read -r -p "  [y/w/N/m/a]: " raw_choice || true
+  nixorcist_trace_selection "attrset.resolve.$attrset" "$raw_choice"
   first_char="${raw_choice,,}"
   first_char="${first_char:0:1}"
   [[ -z "$first_char" ]] && first_char="n"
@@ -529,6 +541,7 @@ transaction_submenu_install_queue() {
     
     printf '  Select an option (0-2): '
     read -r choice
+    nixorcist_trace_selection "install_queue.choice" "$choice"
     
     case "$choice" in
       1)
@@ -557,6 +570,7 @@ transaction_submenu_install_queue() {
             show_warning 'This will clear all query installs.'
             show_yes_no_prompt 'Continue?'
             read -r confirm
+            nixorcist_trace_selection "install_queue.clear_query.confirm" "$confirm"
             if [[ "${confirm,,}" == "y" ]]; then
               TX_QUERY_ADD=()
               show_success 'Install query cleared'
@@ -571,6 +585,7 @@ transaction_submenu_install_queue() {
             show_warning 'This will clear all staged installs.'
             show_yes_no_prompt 'Continue?'
             read -r confirm
+            nixorcist_trace_selection "install_queue.clear_staged.confirm" "$confirm"
             if [[ "${confirm,,}" == "y" ]]; then
               TX_ADD=()
               show_success 'Install queue cleared'
@@ -630,6 +645,7 @@ transaction_submenu_remove_queue() {
     
     printf '  Select an option (0-2): '
     read -r choice
+    nixorcist_trace_selection "remove_queue.choice" "$choice"
     
     case "$choice" in
       1)
@@ -658,6 +674,7 @@ transaction_submenu_remove_queue() {
             show_warning 'This will clear all query removals.'
             show_yes_no_prompt 'Continue?'
             read -r confirm
+            nixorcist_trace_selection "remove_queue.clear_query.confirm" "$confirm"
             if [[ "${confirm,,}" == "y" ]]; then
               TX_QUERY_REMOVE=()
               show_success 'Remove query cleared'
@@ -672,6 +689,7 @@ transaction_submenu_remove_queue() {
             show_warning 'This will clear all staged removals.'
             show_yes_no_prompt 'Continue?'
             read -r confirm
+            nixorcist_trace_selection "remove_queue.clear_staged.confirm" "$confirm"
             if [[ "${confirm,,}" == "y" ]]; then
               TX_REMOVE=()
               show_success 'Remove queue cleared'
@@ -722,6 +740,7 @@ transaction_menu_loop_tty() {
     echo
     show_input_prompt 'Select an option (0-6):'
     read -r choice
+    nixorcist_trace_selection "transaction_menu.choice" "$choice"
     
     case "$choice" in
       1)
@@ -773,6 +792,7 @@ transaction_menu_loop_tty() {
         fi
         show_yes_no_prompt 'Continue?'
         read -r confirm
+        nixorcist_trace_selection "transaction_menu.install_query.confirm" "$confirm"
         if [[ "${confirm,,}" == "y" ]]; then
           if transaction_has_query; then
             transaction_stage_query
@@ -808,6 +828,8 @@ transaction_apply() {
   local -A next=()
   local pkg
 
+  nixorcist_trace "APPLY" "begin add=${#TX_ADD[@]} remove=${#TX_REMOVE[@]} lock=${#TX_LOCK[@]}"
+
   # Start with current lock entries
   for pkg in "${!TX_LOCK[@]}"; do
     next["$pkg"]=1
@@ -828,7 +850,14 @@ transaction_apply() {
     final+=("$pkg")
   done
 
+  if [[ ${#final[@]} -gt 0 ]]; then
+    nixorcist_trace "APPLY_FINAL_ITEMS" "$(printf '%s,' "${final[@]}" | sed 's/,$//')"
+  else
+    nixorcist_trace "APPLY_FINAL_ITEMS" "<empty>"
+  fi
+
   write_lock_entries final
+  nixorcist_trace "APPLY" "final_count=${#final[@]}"
   transaction_write_temp
   show_success "Lock updated - Changes will be applied on rebuild"
 }
@@ -876,6 +905,7 @@ handle_missing_package() {
     echo "  No similar packages found."
     echo
     read -r -p "  Skip this package? [Y/n]: " choice
+    nixorcist_trace_selection "missing_package.skip_choice.$missing" "$choice"
     case "${choice,,}" in
       n) 
         # User wants to browse all packages
@@ -914,6 +944,7 @@ handle_missing_package() {
   echo "    [4] Skip            - Skip this package"
   echo
   read -r -p "  Choose [1-4]: " choice
+  nixorcist_trace_selection "missing_package.resolve_choice.$missing" "$choice"
   
   case "$choice" in
     1)
@@ -1064,6 +1095,7 @@ import_from_file() {
 
   show_divider
   read -r -p "  Review transaction? [Y/n]: " review_answer
+  nixorcist_trace_selection "import.review_transaction" "$review_answer"
   case "${review_answer,,}" in
     n)
       transaction_apply
@@ -1083,6 +1115,7 @@ import_from_file() {
 
   echo
   read -r -p "  Run full pipeline? [y/N]: " run_all_answer
+  nixorcist_trace_selection "import.run_full_pipeline" "$run_all_answer"
   case "${run_all_answer,,}" in
     y)
       show_header "Running full pipeline"
@@ -1210,6 +1243,7 @@ confirm_and_apply_query_from_args() {
     echo "  Press ENTER to accept the default option."
     echo "  Default is [Y]es."
     read -r -p "  INSTALL? [Y/n/a] (y=yes, n=no, a=append, p=preview): " answer
+    nixorcist_trace_selection "args.install_confirm.$action_label" "$answer"
 
     if [[ -z "$answer" ]]; then
       first_char="y"

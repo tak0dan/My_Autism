@@ -330,15 +330,15 @@ _attrset_select_recursive() {
 
 transaction_pick_from_index() {
   ensure_index
-  local index_file key query owner_to_select owner_line owner needle choice
-  local fzf_out row
+  local index_file="" key="" query="" owner_to_select="" owner_line="" owner="" needle="" choice=""
+  local fzf_out="" row=""
   local -a out_lines selected_pkgs
   local -A owner_marks=()
 
   index_file="$(get_index_file)"
 
   _find_owner_for_query() {
-    local query_text="$1"
+    local query_text="${1:-}"
     awk -F'|' -v q="$query_text" '
       BEGIN { ql = tolower(q) }
       {
@@ -359,7 +359,7 @@ transaction_pick_from_index() {
   }
 
   _render_index_rows() {
-    local pkg mark
+    local pkg="" mark=""
     awk -F'|' '{print $1}' "$index_file" | sed '/^[[:space:]]*$/d' | sort -u \
       | while IFS= read -r pkg; do
           [[ -z "$pkg" ]] && continue

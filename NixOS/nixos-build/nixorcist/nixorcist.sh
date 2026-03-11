@@ -107,6 +107,7 @@ main() {
       fi
 
       show_header "Full Pipeline: select → gen → hub → rebuild"
+      index_mark_all_executed
       if [[ "$refresh_first" -eq 1 ]]; then
         build_nix_index
       fi

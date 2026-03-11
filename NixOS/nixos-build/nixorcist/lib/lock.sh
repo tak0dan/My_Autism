@@ -228,10 +228,133 @@ transaction_unstage_menu() {
   fi
 }
 
+transaction_submenu_install_queue() {
+  while true; do
+    clear
+    show_logo
+    show_section_header 'Manage Install Queue'
+    
+    if [[ ${#TX_ADD[@]} -eq 0 ]]; then
+      printf '  (empty)\n'
+    else
+      printf '  Staged for installation:\n\n'
+      printf '%s\n' "${!TX_ADD[@]}" | sort -u | nl | while read -r num pkg; do
+        printf '    %2d. %s\n' "$num" "$pkg"
+      done | head -20
+      
+      local total=${#TX_ADD[@]}
+      if [[ $total -gt 20 ]]; then
+        printf '\n    ... and %d more\n' $((total - 20))
+      fi
+    fi
+    
+    echo
+    show_menu_item '1' 'Remove from queue    - select packages to unstage'
+    show_menu_item '2' 'Clear all            - empty the install queue'
+    show_menu_item '0' 'Back'
+    echo
+    
+    printf '  Select an option (0-2): '
+    read -r choice
+    
+    case "$choice" in
+      1)
+        if [[ ${#TX_ADD[@]} -eq 0 ]]; then
+          show_error 'Install queue is empty'
+          wait_for_key
+        else
+          transaction_unstage_menu add
+        fi
+        ;;
+      2)
+        if [[ ${#TX_ADD[@]} -eq 0 ]]; then
+          show_error 'Install queue is empty'
+          wait_for_key
+        else
+          show_warning 'This will clear all staged installs.'
+          show_yes_no_prompt 'Continue?'
+          read -r confirm
+          
+          if [[ "${confirm,,}" == "y" ]]; then
+            TX_ADD=()
+            show_success 'Install queue cleared'
+            sleep 1
+          fi
+        fi
+        ;;
+      0) break ;;
+      *)
+        show_error 'Invalid option.'
+        wait_for_key
+        ;;
+    esac
+  done
+}
+
+transaction_submenu_remove_queue() {
+  while true; do
+    clear
+    show_logo
+    show_section_header 'Manage Remove Queue'
+    
+    if [[ ${#TX_REMOVE[@]} -eq 0 ]]; then
+      printf '  (empty)\n'
+    else
+      printf '  Staged for removal:\n\n'
+      printf '%s\n' "${!TX_REMOVE[@]}" | sort -u | nl | while read -r num pkg; do
+        printf '    %2d. %s\n' "$num" "$pkg"
+      done | head -20
+      
+      local total=${#TX_REMOVE[@]}
+      if [[ $total -gt 20 ]]; then
+        printf '\n    ... and %d more\n' $((total - 20))
+      fi
+    fi
+    
+    echo
+    show_menu_item '1' 'Remove from queue    - select packages to unstage'
+    show_menu_item '2' 'Clear all            - empty the remove queue'
+    show_menu_item '0' 'Back'
+    echo
+    
+    printf '  Select an option (0-2): '
+    read -r choice
+    
+    case "$choice" in
+      1)
+        if [[ ${#TX_REMOVE[@]} -eq 0 ]]; then
+          show_error 'Remove queue is empty'
+          wait_for_key
+        else
+          transaction_unstage_menu remove
+        fi
+        ;;
+      2)
+        if [[ ${#TX_REMOVE[@]} -eq 0 ]]; then
+          show_error 'Remove queue is empty'
+          wait_for_key
+        else
+          show_warning 'This will clear all staged removals.'
+          show_yes_no_prompt 'Continue?'
+          read -r confirm
+          
+          if [[ "${confirm,,}" == "y" ]]; then
+            TX_REMOVE=()
+            show_success 'Remove queue cleared'
+            sleep 1
+          fi
+        fi
+        ;;
+      0) break ;;
+      *)
+        show_error 'Invalid option.'
+        wait_for_key
+        ;;
+    esac
+  done
+}
 show_transaction_header() {
-  clear
-  show_header "Transaction Builder"
-  echo
+  show_section_header 'Transaction Builder'
   printf '  %-45s %s\n' "Queued to Install:" "${#TX_ADD[@]} package(s)"
   printf '  %-45s %s\n' "Queued to Remove:" "${#TX_REMOVE[@]} package(s)"
   echo
@@ -239,123 +362,86 @@ show_transaction_header() {
   echo
 }
 
-show_transaction_menu_options() {
-  cat << 'MENU'
-  Interactive Menu - Choose an action:
-
-    [a] or [w]    Stage package for installation
-    [b] or [s]    Unstage from installation
-    [c] or [d]    Stage package for removal
-    [e] or [↓]    Unstage from removal
-    [p]           Preview transaction
-    [y]           Apply transaction
-    [n] or [ESC]  Cancel
-    [?] or [h]    This help
-
-  Tip: Press a key to select or ESC for help
-MENU
-}
-
 transaction_menu_loop_tty() {
-  local action selected item loop_first=1
+  local choice
+  local selected item
 
   while true; do
-    if [[ "$loop_first" == "1" ]]; then
-      show_transaction_header
-      show_transaction_menu_options
-      loop_first=0
-    else
-      show_transaction_header
-      echo "  Enter action [a/b/c/e/p/y/n/?]: "
-    fi
-    
-    # Read single character without waiting for Enter
-    read -r -s -n 1 action 2>/dev/null || action="?"
-    action="${action,,}"
     clear
+    show_logo
+    show_transaction_header
+    show_status_line "Use numbers and Enter to navigate."
+    echo
+    show_menu_item '1' 'Add packages        - browse and queue installs'
+    show_menu_item '2' 'Remove packages     - browse and queue removals'
+    show_menu_item '3' 'Manage install queue'
+    show_menu_item '4' 'Manage remove queue'
+    show_menu_item '5' 'Preview changes'
+    show_menu_item '6' 'Apply changes'
+    show_menu_item '0' 'Cancel'
+    echo
+    show_input_prompt 'Select an option (0-6):'
+    read -r choice
     
-    case "$action" in
-      a|w|1)
-        show_header "Stage Package for Installation"
+    case "$choice" in
+      1)
         selected="$(transaction_pick_from_index || true)"
-        [[ -z "$selected" ]] && { echo; echo "  Cancelled"; continue; }
-        show_info "Processing selections..."
+        [[ -z "$selected" ]] && continue
         while IFS= read -r item; do
           [[ -z "$item" ]] && continue
           transaction_expand_and_stage add "$item" || true
         done <<< "$selected"
-        show_divider
-        read -r -p "  Press ENTER to continue..."
+        show_success 'Addition complete'
+        sleep 1
         ;;
-      b|s|2)
-        show_header "Unstage from Installation"
-        transaction_unstage_menu add
-        show_divider
-        read -r -p "  Press ENTER to continue..."
-        ;;
-      c|d|3)
-        show_header "Stage Package for Removal"
+      2)
         selected="$(transaction_pick_for_remove || true)"
-        [[ -z "$selected" ]] && { echo; echo "  Cancelled"; continue; }
-        show_info "Processing selections..."
+        [[ -z "$selected" ]] && continue
         while IFS= read -r item; do
           [[ -z "$item" ]] && continue
           transaction_expand_and_stage remove "$item" || true
         done <<< "$selected"
-        show_divider
-        read -r -p "  Press ENTER to continue..."
+        show_success 'Removal staged'
+        sleep 1
         ;;
-      e|4)
-        show_header "Unstage from Removal"
-        transaction_unstage_menu remove
-        show_divider
-        read -r -p "  Press ENTER to continue..."
+      3)
+        transaction_submenu_install_queue
         ;;
-      p|5)
-        show_header "Transaction Preview"
+      4)
+        transaction_submenu_remove_queue
+        ;;
+      5)
+        clear
+        show_logo
+        show_section_header 'Transaction Preview'
+        echo
         transaction_preview
-        read -r -p "  Press ENTER to continue..."
+        wait_for_key
         ;;
-      y|6)
-        echo
-        read -r -p "  Apply changes? [y/N]: " confirm
-        case "${confirm,,}" in
-          y)
-            transaction_apply
-            return 0
-            ;;
-          *)
-            show_info "Not applied"
-            ;;
-        esac
-        read -r -p "  Press ENTER to continue..."
+      6)
+        clear
+        show_logo
+        show_section_header 'Apply Transaction'
+        show_warning 'This will update the lock file with staged changes.'
+        show_yes_no_prompt 'Continue?'
+        read -r confirm
+        if [[ "${confirm,,}" == "y" ]]; then
+          transaction_apply
+          return 0
+        fi
         ;;
-      n|7)
-        echo
-        show_info "Transaction cancelled"
+      0)
+        clear
+        show_warning 'Transaction cancelled'
+        sleep 1
         return 1
         ;;
-      \?)
-        show_header "Help"
-        show_transaction_menu_options
-        read -r -p "  Press ENTER to continue..."
-        ;;
       *)
-        echo "  Invalid key: $action"
-        read -r -p "  Press ENTER to continue..."
+        show_error 'Invalid option.'
+        wait_for_key
         ;;
     esac
   done
-}
-
-transaction_preview() {
-  echo
-  printf '  Install: %d packages\n' "${#TX_ADD[@]}"
-  [[ ${#TX_ADD[@]} -gt 0 ]] && printf '    + %s\n' "${!TX_ADD[@]}" | sort -u | head -10 || echo "    (none)"
-  echo
-  printf '  Remove: %d packages\n' "${#TX_REMOVE[@]}"
-  [[ ${#TX_REMOVE[@]} -gt 0 ]] && printf '    - %s\n' "${!TX_REMOVE[@]}" | sort -u | head -10 || echo "    (none)"
-  echo
 }
 
 transaction_write_temp() {

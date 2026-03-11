@@ -625,7 +625,7 @@ transaction_pick_from_index() {
       fi
 
       if [[ -z "$needle" ]]; then
-        show_warning "Type something in the query field first, then press Shift+S."
+        show_warning "Type something in the query field first, then press ctrl-o or pick OWNER SEARCH row."
         continue
       fi
 
@@ -656,10 +656,10 @@ transaction_pick_from_index() {
       owner_marks["$owner"]="$needle"
 
       owner_menu_out="$(
-        printf 'Yes - add owner package\nNo - keep selection unchanged\n' \
+        printf 'No - keep selection unchanged\nYes - add owner package\n' \
           | fzf --ansi --no-multi --expect=enter \
             --prompt="OWNER APPROVAL> " \
-            --header="Owner found: $owner for query: $needle" \
+            --header="Owner found: $owner for query: $needle (default: No)" \
             --preview-window=hidden --height=10 --layout=reverse --border
       )" || true
 

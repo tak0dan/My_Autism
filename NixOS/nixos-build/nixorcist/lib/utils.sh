@@ -12,11 +12,10 @@ _nix_pkg_args_ready=0
 _init_nix_pkg_args() {
   if [[ "$_nix_pkg_args_ready" -eq 1 ]]; then return 0; fi
   _nix_pkg_args_ready=1
-  # Already works → nothing extra needed
   if nix eval --raw --impure --expr 'builtins.toString <nixpkgs>' &>/dev/null; then
     return 0
   fi
-  # Try common channel paths (root channels, SUDO_USER channels)
+
   local p
   for p in \
     "/nix/var/nix/profiles/per-user/root/channels/nixpkgs" \
@@ -31,17 +30,73 @@ _init_nix_pkg_args() {
   done
 }
 
+_flake_attr_kind() {
+  local pkg="$1"
+
+  nix eval --impure --raw --expr "
+    let
+      flake = builtins.getFlake \"flake:nixpkgs\";
+      pkgs = flake.legacyPackages.\${builtins.currentSystem};
+      val = builtins.tryEval pkgs.${pkg};
+    in
+      if !val.success then
+        \"missing\"
+      else if builtins.isAttrs val.value && (val.value.type or null) == \"derivation\" then
+        \"derivation\"
+      else if builtins.isAttrs val.value then
+        \"attrset\"
+      else
+        \"other\"
+  " 2>/dev/null || true
+}
+
+_flake_attr_description() {
+  local pkg="$1"
+
+  nix eval --impure --raw --expr "
+    let
+      flake = builtins.getFlake \"flake:nixpkgs\";
+      pkgs = flake.legacyPackages.\${builtins.currentSystem};
+      val = builtins.tryEval pkgs.${pkg};
+    in
+      if !val.success then
+        \"Not a package\"
+      else if builtins.isAttrs val.value && (val.value.type or null) == \"derivation\" then
+        (val.value.meta.description or \"No description\")
+      else if builtins.isAttrs val.value then
+        \"Attribute set\"
+      else
+        \"Not a package\"
+  " 2>/dev/null || true
+}
+
+_flake_attr_children() {
+  local entry="$1"
+
+  nix eval --impure --raw --expr "
+    let
+      flake = builtins.getFlake \"flake:nixpkgs\";
+      pkgs = flake.legacyPackages.\${builtins.currentSystem};
+      val = builtins.tryEval pkgs.${entry};
+    in
+      if val.success && builtins.isAttrs val.value then
+        builtins.concatStringsSep \"\\n\" (builtins.attrNames val.value)
+      else
+        \"\"
+  " 2>/dev/null || true
+}
+
 get_index_file() {
   echo "$ROOT/cache/nixpkgs-index.txt"
 }
 
 ensure_index() {
-
   local index
   local version_file expected_version current_version
-  index=$(get_index_file)
+
+  index="$(get_index_file)"
   version_file="$ROOT/cache/nixpkgs-index.version"
-  expected_version="2"
+  expected_version="3"
 
   if [[ ! -f "$index" ]]; then
     build_nix_index
@@ -58,16 +113,39 @@ ensure_index() {
   fi
 }
 
+index_has_exact_attr() {
+  local entry="$1"
+  local index_file
+  index_file="$(get_index_file)"
+  [[ -f "$index_file" ]] || return 1
+  awk -F'|' -v e="$entry" '$1 == e { found = 1; exit } END { exit !found }' "$index_file"
+}
+
+index_has_children() {
+  local entry="$1"
+  local index_file
+  index_file="$(get_index_file)"
+  [[ -f "$index_file" ]] || return 1
+  awk -F'|' -v e="$entry" 'index($1, e ".") == 1 { found = 1; exit } END { exit !found }' "$index_file"
+}
+
 get_pkg_description() {
   local pkg="$1"
-  # Try flake-based lookup first (no NIX_PATH needed)
+  local flake_desc=""
   local flake_type
+
+  flake_desc="$(_flake_attr_description "$pkg")"
+  if [[ -n "$flake_desc" ]]; then
+    printf '%s\n' "$flake_desc"
+    return
+  fi
+
   flake_type=$(nix eval --impure "nixpkgs#${pkg}.type" 2>/dev/null) || true
   if [[ "$flake_type" == '"derivation"' ]]; then
     nix eval --impure --raw "nixpkgs#${pkg}.meta.description" 2>/dev/null || echo "No description"
     return
   fi
-  # Fallback: channel-based eval
+
   _init_nix_pkg_args
   nix eval --impure "${_nix_pkg_args[@]}" --raw --expr "
     let
@@ -83,7 +161,6 @@ get_pkg_description() {
       else
         \"Not a package\"
   " 2>/dev/null
-  return 0
 }
 
 list_available_packages() {
@@ -109,45 +186,93 @@ purge_all_modules() {
 
 is_derivation() {
   local pkg="$1"
-  # Try flake reference first (works on flakes-enabled NixOS without NIX_PATH)
+  local flake_kind=""
   local flake_type
+
+  flake_kind="$(_flake_attr_kind "$pkg")"
+  [[ "$flake_kind" == "derivation" ]] && return 0
+  [[ "$flake_kind" == "attrset" ]] && return 1
+
   flake_type=$(nix eval --impure "nixpkgs#${pkg}.type" 2>/dev/null) || true
   [[ "$flake_type" == '"derivation"' ]] && return 0
-  # Fallback: channel-based eval
+
   _init_nix_pkg_args
-  nix eval --impure "${_nix_pkg_args[@]}" --expr "
+  if nix eval --impure "${_nix_pkg_args[@]}" --expr "
     let
       pkgs = import <nixpkgs> {};
       val = pkgs.${pkg};
     in
       builtins.isAttrs val && (val.type or null) == \"derivation\"
-  " 2>/dev/null | grep -q true
+  " 2>/dev/null | grep -q true; then
+    return 0
+  fi
+
+  # Do not reclassify known attrsets as derivations when cache lacks children.
+  [[ "$flake_kind" == "attrset" ]] && return 1
+
+  index_has_exact_attr "$pkg" && ! index_has_children "$pkg"
 }
 
 is_attrset() {
   local pkg="$1"
-  # Fast path: if it IS a derivation it cannot be an attrset
+  local flake_kind=""
+
   is_derivation "$pkg" && return 1
-  # Channel-based check
+
+  flake_kind="$(_flake_attr_kind "$pkg")"
+  [[ "$flake_kind" == "attrset" ]] && return 0
+
   _init_nix_pkg_args
-  nix eval --impure "${_nix_pkg_args[@]}" --expr "
+  if nix eval --impure "${_nix_pkg_args[@]}" --expr "
     let
       pkgs = import <nixpkgs> {};
       val = builtins.tryEval pkgs.${pkg};
     in
       val.success && builtins.isAttrs val.value &&
       (val.value.type or null) != \"derivation\"
-  " 2>/dev/null | grep -q true
+  " 2>/dev/null | grep -q true; then
+    return 0
+  fi
+
+  index_has_children "$pkg"
 }
 
 list_attrset_children() {
+  local entry="$1"
+  local out=""
+
+  out="$(_flake_attr_children "$entry")"
+  if [[ -n "$out" ]]; then
+    printf '%s\n' "$out"
+    return 0
+  fi
+
   _init_nix_pkg_args
-  nix eval --impure "${_nix_pkg_args[@]}" --raw --expr "
+  out=$(nix eval --impure "${_nix_pkg_args[@]}" --raw --expr "
     let
       pkgs = import <nixpkgs> {};
     in
-      builtins.concatStringsSep \"\n\" (builtins.attrNames pkgs.${1})
-  " 2>/dev/null
+      builtins.concatStringsSep \"\n\" (builtins.attrNames pkgs.${entry})
+  " 2>/dev/null) || true
+
+  if [[ -n "$out" ]]; then
+    printf '%s\n' "$out"
+    return 0
+  fi
+
+  local index_file
+  index_file="$(get_index_file)"
+  [[ -f "$index_file" ]] || return 0
+
+  awk -F'|' -v p="$entry" '
+    {
+      attr = $1
+      if (index(attr, p ".") != 1) next
+      rest = substr(attr, length(p) + 2)
+      split(rest, parts, ".")
+      if (parts[1] != "") print parts[1]
+    }
+  ' "$index_file" | sort -u
 }
 
 is_valid_token() {
@@ -157,7 +282,6 @@ is_valid_token() {
 
 sanitize_token() {
   local token="$1"
-  # Keep original case; Nix attribute paths are case-sensitive.
   token="${token//$'\r'/}"
   token="$(echo "$token" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
   echo "$token"
@@ -204,7 +328,7 @@ get_pkg_type() {
 count_attrset_packages() {
   local entry="$1"
   local child resolved count=0
-  
+
   while IFS= read -r child; do
     [[ -z "$child" ]] && continue
     resolved="$entry.$child"
@@ -212,13 +336,14 @@ count_attrset_packages() {
       ((count++))
     fi
   done < <(list_attrset_children "$entry")
-  
+
   echo "$count"
 }
 
 find_similar_packages() {
   local query="$1"
-  local index_file="$(get_index_file)"
-  
+  local index_file
+  index_file="$(get_index_file)"
+
   awk -F'|' -v q="$query" 'tolower($1) ~ tolower(q) {print $1}' "$index_file" 2>/dev/null | sort -u | head -30
 }

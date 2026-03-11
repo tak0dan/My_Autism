@@ -81,6 +81,157 @@ transaction_add_to_query() {
   return 0
 }
 
+_fzf_pkg_preview_cmd() {
+  printf 'ROOT=%q; source %q >/dev/null 2>&1; pkg=$(printf "%%s" "{}" | cut -f1); get_pkg_description "$pkg"' \
+    "$ROOT" "$ROOT/lib/utils.sh"
+}
+
+_fzf_attrset_child_preview_cmd() {
+  local attrset="$1"
+  printf 'ROOT=%q; source %q >/dev/null 2>&1; pkg=%q.$(printf "%%s" "{}"); get_pkg_description "$pkg"' \
+    "$ROOT" "$ROOT/lib/utils.sh" "$attrset"
+}
+
+_entry_should_prompt_as_attrset() {
+  local entry="$1"
+
+  index_has_children "$entry" && return 0
+  [[ "$(get_pkg_type "$entry")" == "attrset" ]]
+}
+
+_collect_attrset_recursive_for_query() {
+  local attrset="$1"
+  local depth="${2:-0}"
+  local -n out_ref=$3
+  local children="" child="" full=""
+
+  if [[ "$depth" -gt 5 ]]; then
+    show_warning "Max recursion depth reached for $attrset"
+    return 1
+  fi
+
+  children="$(list_attrset_children "$attrset")" || true
+  [[ -z "$children" ]] && return 1
+
+  while IFS= read -r child; do
+    [[ -z "$child" ]] && continue
+    full="$attrset.$child"
+    if _entry_should_prompt_as_attrset "$full"; then
+      _collect_attrset_recursive_for_query "$full" $(( depth + 1 )) out_ref || true
+    elif [[ "$(get_pkg_type "$full")" == "package" ]]; then
+      out_ref["$full"]=1
+    fi
+  done <<< "$children"
+
+  return 0
+}
+
+_resolve_attrset_for_query() {
+  local attrset="$1"
+  local -n out_ref=$2
+  local pkg_count="" raw_choice="" first_char="" child="" full="" child_type=""
+  local selected=""
+  local resolved=()
+
+  pkg_count="$(count_attrset_packages "$attrset")"
+
+  show_section "Attribute Set: $attrset"
+  echo "  Your selection is a non-package attribute set ($pkg_count packages)."
+  echo
+  printf '  %s\n' "  Y - Select closest one by name"
+  printf '  %s\n' "  W - Select all the associated packages"
+  printf '  %s\n' "  N - Skip this attribute set"
+  printf '  %s\n' "  M - Manually select from the associated packages"
+  printf '  %s\n' "  A - Recursively resolve and select ALL associated packages"
+  echo
+
+  read -r -p "  [y/w/N/m/a]: " raw_choice || true
+  nixorcist_trace_selection "query.attrset.resolve.$attrset" "$raw_choice"
+  first_char="${raw_choice,,}"
+  first_char="${first_char:0:1}"
+  [[ -z "$first_char" ]] && first_char="n"
+
+  case "$first_char" in
+    y)
+      if resolve_entry_to_packages "$attrset" resolved && [[ ${#resolved[@]} -gt 0 ]]; then
+        out_ref["${resolved[0]}"]=1
+        show_item "✓" "Selected closest: ${resolved[0]}"
+        return 0
+      fi
+      show_error "No packages found in $attrset"
+      return 1
+      ;;
+    w)
+      if resolve_entry_to_packages "$attrset" resolved && [[ ${#resolved[@]} -gt 0 ]]; then
+        local pkg=""
+        for pkg in "${resolved[@]}"; do
+          out_ref["$pkg"]=1
+        done
+        show_item "✓" "Selected all ${#resolved[@]} packages from $attrset"
+        return 0
+      fi
+      show_error "No packages found in $attrset"
+      return 1
+      ;;
+    m)
+      selected=$(list_attrset_children "$attrset" | sort -u | fzf --multi \
+        --prompt="SELECT FROM $attrset > " \
+        --header="TAB=multi-select | ENTER=confirm | ESC=cancel" \
+        --preview "$(_fzf_attrset_child_preview_cmd "$attrset")") || true
+
+      if [[ -z "$selected" ]]; then
+        show_item "⊘" "Selection cancelled"
+        return 1
+      fi
+
+      while IFS= read -r child; do
+        [[ -z "$child" ]] && continue
+        full="$attrset.$child"
+        if _entry_should_prompt_as_attrset "$full"; then
+          _resolve_attrset_for_query "$full" out_ref || true
+          continue
+        fi
+
+        child_type="$(get_pkg_type "$full")"
+        if [[ "$child_type" == "package" ]]; then
+          out_ref["$full"]=1
+        else
+          show_warning "Could not resolve: $full"
+        fi
+      done <<< "$selected"
+      return 0
+      ;;
+    a)
+      if _collect_attrset_recursive_for_query "$attrset" 0 out_ref && [[ ${#out_ref[@]} -gt 0 ]]; then
+        show_item "✓" "Recursively selected packages under $attrset"
+        return 0
+      fi
+      show_error "No packages found in $attrset"
+      return 1
+      ;;
+    *)
+      show_item "⊘" "Skipped: $attrset"
+      return 1
+      ;;
+  esac
+}
+
+transaction_resolve_token_for_query() {
+  local token="$1"
+  local -n out_ref=$2
+
+  token="$(sanitize_token "$token")"
+  [[ -z "$token" ]] && return 1
+
+  if _entry_should_prompt_as_attrset "$token"; then
+    _resolve_attrset_for_query "$token" out_ref
+    return $?
+  fi
+
+  out_ref["$token"]=1
+  return 0
+}
+
 transaction_stage_query() {
   local item
   local had_error=0
@@ -329,38 +480,50 @@ _attrset_select_recursive() {
 }
 
 transaction_pick_from_index() {
-  ensure_index
+  ensure_index >/dev/null 2>&1 || true
   local index_file="" key="" query="" owner_to_select="" owner_line="" owner="" needle="" choice=""
   local fzf_out="" row=""
-  local approval_out="" approval_key="" approval_pick=""
-  local -a out_lines selected_pkgs
+  local owner_menu_out="" approval_choice=""
+  local -a out_lines selected_pkgs owner_candidates
   local -A owner_marks=()
+  local owner_action_token="__OWNER_SEARCH__"
 
   index_file="$(get_index_file)"
+  [[ -f "$index_file" ]] || {
+    show_error 'Package index is unavailable.'
+    return 1
+  }
 
-  _find_owner_for_query() {
+  _find_owner_candidates_for_query() {
     local query_text="${1:-}"
     awk -F'|' -v q="$query_text" '
       BEGIN { ql = tolower(q) }
       {
         p = $1
         pl = tolower(p)
-        if (pl == ql) {
-          score = 0
-        } else if (index(pl, ql) == 1) {
-          score = 1
-        } else if (index(pl, ql) > 0) {
-          score = 2
-        } else {
+        if (ql == "" || pl == ql || index(pl, ql) == 0) {
           next
         }
-        printf "%d|%08d|%s\n", score, length(p), p
+
+        split(p, parts, ".")
+        if (length(parts) < 2) next
+
+        owner = parts[1]
+        for (i = 2; i < length(parts); i++) {
+          owner = owner "." parts[i]
+        }
+
+        if (owner == "" || owner == q || seen[owner]++) next
+
+        score = index(pl, ql) == 1 ? 0 : 1
+        printf "%d|%08d|%s\n", score, length(owner), owner
       }
-    ' "$index_file" | sort -t'|' -k1,1n -k2,2n -k3,3 | head -n1 | cut -d'|' -f3
+    ' "$index_file" | sort -t'|' -k1,1n -k2,2n -k3,3 | cut -d'|' -f3
   }
 
   _render_index_rows() {
     local pkg="" mark=""
+    printf '%s\t%s\n' "$owner_action_token" 'OWNER SEARCH FROM CURRENT QUERY'
     awk -F'|' '{print $1}' "$index_file" | sed '/^[[:space:]]*$/d' | sort -u \
       | while IFS= read -r pkg; do
           [[ -z "$pkg" ]] && continue
@@ -388,8 +551,8 @@ transaction_pick_from_index() {
         --with-nth=2 \
         --bind "start:pos($owner_line)+toggle" \
         --prompt="SELECT> " \
-        --header="TAB mark | ENTER confirm | Shift+S owner-search from query" \
-        --preview 'pkg=$(printf "%s" "{}" | cut -f1); desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$index_file"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' \
+        --header="TAB mark | ENTER confirm | select OWNER SEARCH row for menu B" \
+        --preview "$(_fzf_pkg_preview_cmd)" \
         --preview-window=down:6:wrap)" || return 1
     else
       fzf_out="$(_render_index_rows | fzf --ansi --multi \
@@ -398,8 +561,8 @@ transaction_pick_from_index() {
         --delimiter=$'\t' \
         --with-nth=2 \
         --prompt="SELECT> " \
-        --header="TAB mark | ENTER confirm | Shift+S owner-search from query" \
-        --preview 'pkg=$(printf "%s" "{}" | cut -f1); desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$index_file"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' \
+        --header="TAB mark | ENTER confirm | select OWNER SEARCH row for menu B" \
+        --preview "$(_fzf_pkg_preview_cmd)" \
         --preview-window=down:6:wrap)" || return 1
     fi
 
@@ -415,7 +578,20 @@ transaction_pick_from_index() {
       selected_pkgs+=("$(printf '%s\n' "$row" | cut -f1)")
     done
 
-    if [[ "$key" == "S" ]]; then
+    if printf '%s\n' "${selected_pkgs[@]}" | grep -qx "$owner_action_token"; then
+      key="OWNER_ACTION"
+      selected_pkgs=()
+    fi
+
+    if [[ "$key" == "enter" && ${#selected_pkgs[@]} -eq 0 ]]; then
+      needle="$(sanitize_token "$query")"
+      if [[ -n "$needle" ]] && (index_has_exact_attr "$needle" || index_has_children "$needle" || is_valid_token "$needle"); then
+        printf '%s\n' "$needle"
+        return 0
+      fi
+    fi
+
+    if [[ "$key" == "S" || "$key" == "OWNER_ACTION" ]]; then
       needle="$(sanitize_token "$query")"
       if [[ -z "$needle" && ${#selected_pkgs[@]} -gt 0 ]]; then
         needle="${selected_pkgs[0]}"
@@ -426,8 +602,8 @@ transaction_pick_from_index() {
         continue
       fi
 
-      owner="$(_find_owner_for_query "$needle")"
-      if [[ -z "$owner" ]]; then
+      mapfile -t owner_candidates < <(_find_owner_candidates_for_query "$needle")
+      if [[ ${#owner_candidates[@]} -eq 0 ]]; then
         echo
         show_warning "No owner package found for: $needle"
         printf '  Press ENTER to continue...'
@@ -435,23 +611,27 @@ transaction_pick_from_index() {
         continue
       fi
 
-      approval_out="$(
-        printf 'Yes - add owner package to selection\nNo - keep owner unselected\n' \
-          | fzf --ansi --no-multi --expect=enter \
-            --prompt="OWNER APPROVAL> " \
-            --header="Owner found: $owner (from query: $needle)" \
-            --preview-window=hidden --height=10 --layout=reverse --border
-      )" || true
+      owner_menu_out="$(printf '%s\n' "${owner_candidates[@]}" | sort -u | fzf --ansi --no-multi --expect=enter \
+        --prompt="OWNER SEARCH> " \
+        --header="Select owner for: $needle" \
+        --preview "$(_fzf_pkg_preview_cmd)" \
+        --preview-window=down:6:wrap --height=14 --layout=reverse --border)" || true
 
-      mapfile -t out_lines <<< "$approval_out"
-      approval_key="${out_lines[0]:-}"
-      approval_pick="${out_lines[1]:-}"
+      mapfile -t out_lines <<< "$owner_menu_out"
+      if [[ "${out_lines[0]:-}" != "enter" || -z "${out_lines[1]:-}" ]]; then
+        continue
+      fi
+
+      owner="${out_lines[1]}"
 
       # Always annotate owner in menu A so user understands mapping,
       # even if they decline auto-selecting it.
       owner_marks["$owner"]="$needle"
 
-      if [[ "$approval_key" == "enter" && "$approval_pick" == Yes* ]]; then
+      read -r -p "  Add owner package '$owner' for '$needle'? [Y/n]: " approval_choice || true
+      approval_choice="${approval_choice,,}"
+      approval_choice="${approval_choice:0:1}"
+      if [[ -z "$approval_choice" || "$approval_choice" == "y" ]]; then
         owner_to_select="$owner"
       fi
       continue
@@ -470,7 +650,7 @@ transaction_pick_for_remove() {
     | fzf --multi \
       --prompt="REMOVE> " \
       --header="TAB mark | ENTER confirm" \
-      --preview 'pkg="{}"; desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$(get_index_file)"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' \
+      --preview "$(_fzf_pkg_preview_cmd)" \
       --preview-window=down:4:wrap
 }
 
@@ -760,20 +940,32 @@ transaction_menu_loop_tty() {
       1)
         selected="$(transaction_pick_from_index || true)"
         [[ -z "$selected" ]] && continue
+        local -A resolved_add_tokens=()
+        while IFS= read -r item; do
+          [[ -z "$item" ]] && continue
+          transaction_resolve_token_for_query "$item" resolved_add_tokens || true
+        done <<< "$selected"
+        [[ ${#resolved_add_tokens[@]} -eq 0 ]] && continue
         while IFS= read -r item; do
           [[ -z "$item" ]] && continue
           transaction_add_to_query add "$item" || true
-        done <<< "$selected"
+        done < <(printf '%s\n' "${!resolved_add_tokens[@]}" | sort -u)
         show_success 'Added to install query'
         sleep 1
         ;;
       2)
         selected="$(transaction_pick_for_remove || true)"
         [[ -z "$selected" ]] && continue
+        local -A resolved_remove_tokens=()
+        while IFS= read -r item; do
+          [[ -z "$item" ]] && continue
+          transaction_resolve_token_for_query "$item" resolved_remove_tokens || true
+        done <<< "$selected"
+        [[ ${#resolved_remove_tokens[@]} -eq 0 ]] && continue
         while IFS= read -r item; do
           [[ -z "$item" ]] && continue
           transaction_add_to_query remove "$item" || true
-        done <<< "$selected"
+        done < <(printf '%s\n' "${!resolved_remove_tokens[@]}" | sort -u)
         show_success 'Added to remove query'
         sleep 1
         ;;
@@ -926,7 +1118,7 @@ handle_missing_package() {
         suggested=$(awk -F'|' '{print $1}' "$(get_index_file)" | sort -u | fzf \
           --prompt="BROWSE ALL PACKAGES > " \
           --header="Type to filter | ENTER=select | ESC=cancel" \
-          --preview 'pkg="{}"; desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$(get_index_file)"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' || true)
+          --preview 'pkg="{}"; get_pkg_description "$pkg"' || true)
         
         if [[ -n "$suggested" ]]; then
           if [[ "$mode" == "add" ]]; then
@@ -966,7 +1158,7 @@ handle_missing_package() {
       suggested=$(echo "$similar_pkgs" | fzf --multi \
         --prompt="SELECT FROM MATCHES > " \
         --header="TAB=multi | ENTER=confirm | ESC=cancel" \
-        --preview 'pkg="{}"; desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$(get_index_file)"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' || true)
+        --preview 'pkg="{}"; get_pkg_description "$pkg"' || true)
       
       if [[ -n "$suggested" ]]; then
         local pkg_name
@@ -1006,7 +1198,7 @@ handle_missing_package() {
       suggested=$(awk -F'|' '{print $1}' "$(get_index_file)" | sort -u | fzf --multi \
         --prompt="BROWSE ALL PACKAGES > " \
         --header="Type to filter | TAB=multi | ENTER=confirm | ESC=cancel" \
-        --preview 'pkg="{}"; desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$(get_index_file)"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' || true)
+        --preview 'pkg="{}"; get_pkg_description "$pkg"' || true)
       
       if [[ -n "$suggested" ]]; then
         while IFS= read -r pkg_name; do

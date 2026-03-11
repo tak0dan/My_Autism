@@ -1,0 +1,38 @@
+2026-03-11 18:00:03 | INIT | Goal: validate timings/logic/two-menu/attrset in temp repo only with nested nixorcist-old layout | Counter=4
+2026-03-11 18:00:03 | CHANGE-BEFORE | Goal=Reapply active fixes and harness to refreshed temp copy after old-path move | Counter=4
+2026-03-11 18:00:03 | CHANGE-AFTER | Result=Refreshed temp tree now matches nested nixorcist-old layout and includes current harness/fixes | Counter=4
+2026-03-11 18:00:03 | TEST-BEFORE | Name=HarnessFullRun-RefreshedTree | Counter=4
+2026-03-11 18:00:03 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-11 18:00:03 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=0
+2026-03-11 18:00:03 | TEST-BEFORE | Goal=True two-menu fzf flow for swaync owner search with explicit approval=no | Counter=0
+2026-03-11 18:02:32 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-11 18:02:32 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=0
+2026-03-11 18:02:32 | TEST-BEFORE | Goal=True two-menu fzf flow for swaync owner search with explicit approval=no | Counter=0
+2026-03-11 18:03:16 | ASSUMPTION-FAILED | Detail=fzf mock call counter was lost across subshells in owner-search flow | Counter=5
+2026-03-11 18:03:16 | CHANGE-BEFORE | Goal=Persist harness fzf call sequencing across command substitutions | Counter=5
+2026-03-11 18:03:16 | CHANGE-AFTER | Result=Harness now uses file-backed fzf call counter in sandbox | Counter=5
+2026-03-11 18:03:16 | TEST-BEFORE | Name=HarnessFullRun-AfterFzfCounterFix | Counter=5
+2026-03-11 18:03:16 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-11 18:03:16 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=0
+2026-03-11 18:03:16 | TEST-BEFORE | Goal=True two-menu fzf flow for swaync owner search with explicit approval=no | Counter=0
+2026-03-11 18:03:16 | TEST-AFTER | Result=PASS two-menu flow returned to menu A and did not auto-add owner | Counter=0
+2026-03-11 18:03:16 | TEST-BEFORE | Goal=Edge token validation | Counter=0
+2026-03-11 18:03:16 | TEST-AFTER | Result=PASS invalid token rejected | Counter=0
+2026-03-11 18:03:16 | TEST-BEFORE | Goal=Description cache reuse | Counter=0
+2026-03-11 18:03:16 | TEST-AFTER | Result=PASS description cache files present | Counter=0
+2026-03-11 18:03:16 | TEST-BEFORE | Goal=Timing probes for core command paths | Counter=0
+2026-03-11 18:05:36 | ASSUMPTION-FAILED | Detail=timing probe still invoked interactive attrset resolver without scripted input | Counter=6
+2026-03-11 18:05:36 | CHANGE-BEFORE | Goal=Make timing attrset probe non-interactive | Counter=6
+2026-03-11 18:05:36 | CHANGE-AFTER | Result=Timing probe now pipes explicit W choice into attrset resolver | Counter=6
+2026-03-11 18:05:36 | TEST-BEFORE | Name=HarnessFullRun-AfterTimingProbeFix | Counter=6
+2026-03-11 18:05:36 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-11 18:05:36 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=0
+2026-03-11 18:05:36 | TEST-BEFORE | Goal=True two-menu fzf flow for swaync owner search with explicit approval=no | Counter=0
+2026-03-11 18:05:36 | TEST-AFTER | Result=PASS two-menu flow returned to menu A and did not auto-add owner | Counter=0
+2026-03-11 18:05:36 | TEST-BEFORE | Goal=Edge token validation | Counter=0
+2026-03-11 18:05:36 | TEST-AFTER | Result=PASS invalid token rejected | Counter=0
+2026-03-11 18:05:36 | TEST-BEFORE | Goal=Description cache reuse | Counter=0
+2026-03-11 18:05:36 | TEST-AFTER | Result=PASS description cache files present | Counter=0
+2026-03-11 18:05:36 | TEST-BEFORE | Goal=Timing probes for core command paths | Counter=0
+2026-03-11 18:05:36 | TEST-AFTER | Result=PASS timings ensure_index=0s attrset=0s pick=0s pickResult=nano | Counter=0
+2026-03-11 18:05:36 | TEST-AFTER | Name=HarnessFullRun-AfterTimingProbeFix | Exit=0 | Counter=6

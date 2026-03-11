@@ -133,7 +133,7 @@ _resolve_attrset_for_query() {
   local out_ref_name="${!out_ref}"
   local pkg_count="" raw_choice="" first_char="" child="" full="" child_type=""
   local selected=""
-  local resolved=()
+  local -a resolved=()
 
   pkg_count="$(count_attrset_packages "$attrset")"
 
@@ -286,7 +286,7 @@ transaction_cleanup() {
 transaction_expand_and_stage() {
   local mode="$1"
   local entry="$2"
-  local resolved=()
+  local -a resolved=()
   local pkg
 
   entry="$(sanitize_token "$entry")"
@@ -386,7 +386,7 @@ _attrset_stage_pkg() {
 # Y — pick the first / closest-named package from the attrset.
 _attrset_select_closest() {
   local mode="$1" attrset="$2"
-  local resolved=()
+  local -a resolved=()
   if resolve_entry_to_packages "$attrset" resolved && [[ ${#resolved[@]} -gt 0 ]]; then
     _attrset_stage_pkg "$mode" "${resolved[0]}"
     show_item "✓" "Selected closest: ${resolved[0]}"
@@ -399,7 +399,7 @@ _attrset_select_closest() {
 # W — stage every package directly under the attrset (one level only).
 _attrset_select_all() {
   local mode="$1" attrset="$2"
-  local resolved=()
+  local -a resolved=()
   if resolve_entry_to_packages "$attrset" resolved && [[ ${#resolved[@]} -gt 0 ]]; then
     local pkg
     for pkg in "${resolved[@]}"; do

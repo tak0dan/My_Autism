@@ -418,12 +418,12 @@ resolve_entry_to_packages() {
   fi
 
   if is_attrset "$entry"; then
-    local child resolved
+    local child resolved_pkg
     while IFS= read -r child; do
       [[ -z "$child" ]] && continue
-      resolved="$entry.$child"
-      if is_derivation "$resolved"; then
-        out_ref+=("$resolved")
+      resolved_pkg="$entry.$child"
+      if is_derivation "$resolved_pkg"; then
+        out_ref+=("$resolved_pkg")
       fi
     done < <(list_attrset_children "$entry")
 

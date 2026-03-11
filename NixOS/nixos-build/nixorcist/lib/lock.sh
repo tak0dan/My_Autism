@@ -381,23 +381,23 @@ transaction_pick_from_index() {
 
     if [[ -n "$owner_line" ]]; then
       fzf_out="$(_render_index_rows | fzf --ansi --multi \
-        --expect=enter,s \
+        --expect=enter,S \
         --print-query \
         --delimiter=$'\t' \
         --with-nth=2 \
         --bind "start:pos($owner_line)+toggle" \
         --prompt="SELECT> " \
-        --header="TAB mark | ENTER confirm | S owner-search from query" \
+        --header="TAB mark | ENTER confirm | Shift+S owner-search from query" \
         --preview 'pkg=$(printf "%s" "{}" | cut -f1); desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$index_file"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' \
         --preview-window=down:6:wrap)" || return 1
     else
       fzf_out="$(_render_index_rows | fzf --ansi --multi \
-        --expect=enter,s \
+        --expect=enter,S \
         --print-query \
         --delimiter=$'\t' \
         --with-nth=2 \
         --prompt="SELECT> " \
-        --header="TAB mark | ENTER confirm | S owner-search from query" \
+        --header="TAB mark | ENTER confirm | Shift+S owner-search from query" \
         --preview 'pkg=$(printf "%s" "{}" | cut -f1); desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$index_file"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' \
         --preview-window=down:6:wrap)" || return 1
     fi
@@ -414,14 +414,14 @@ transaction_pick_from_index() {
       selected_pkgs+=("$(printf '%s\n' "$row" | cut -f1)")
     done
 
-    if [[ "$key" == "s" ]]; then
+    if [[ "$key" == "S" ]]; then
       needle="$(sanitize_token "$query")"
       if [[ -z "$needle" && ${#selected_pkgs[@]} -gt 0 ]]; then
         needle="${selected_pkgs[0]}"
       fi
 
       if [[ -z "$needle" ]]; then
-        show_warning "Type something in the query field first, then press S."
+        show_warning "Type something in the query field first, then press Shift+S."
         continue
       fi
 

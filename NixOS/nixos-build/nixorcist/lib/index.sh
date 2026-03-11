@@ -7,6 +7,7 @@ INDEX_VERSION_FILE="$INDEX_DIR/nixpkgs-index.version"
 INDEX_FETCH_TIME_FILE="$INDEX_DIR/index-fetch-seconds.txt"
 INDEX_FETCH_PROFILE_FILE="$INDEX_DIR/index-fetch-profile.txt"
 INDEX_STATUS_FILE="$INDEX_DIR/index-status.txt"
+INDEX_REFRESH_ERROR_FILE="$INDEX_DIR/index-refresh-last-error.log"
 INDEX_RECOMMENDED_REFRESH_SECS=$((7 * 24 * 60 * 60))
 
 _INDEX_UI_ACTIVE=0
@@ -187,6 +188,7 @@ _index_profile_defaults_from_total() {
   (( _INDEX_EXPECTED_A < 2 )) && _INDEX_EXPECTED_A=2
   (( _INDEX_EXPECTED_B < 2 )) && _INDEX_EXPECTED_B=2
   (( _INDEX_EXPECTED_C < 3 )) && _INDEX_EXPECTED_C=3
+  return 0
 }
 
 _index_load_profile() {
@@ -210,6 +212,8 @@ _index_load_profile() {
   if [[ "$seen" -eq 0 ]]; then
     _index_profile_defaults_from_total "$_INDEX_EXPECTED_SECS"
   fi
+
+  return 0
 }
 
 _index_save_profile() {
@@ -394,8 +398,15 @@ _index_run_stage() {
 
 _index_source_a() {
   local out_file="$1"
+  local -a nix_args=()
+
+  if declare -F _init_nix_pkg_args >/dev/null 2>&1; then
+    _init_nix_pkg_args
+    nix_args=("${_nix_pkg_args[@]}")
+  fi
+
   command -v nix-env >/dev/null 2>&1 || return 0
-  nix-env -f '<nixpkgs>' -qaP --description 2>/dev/null \
+  nix-env "${nix_args[@]}" -f '<nixpkgs>' -qaP --description 2>/dev/null \
     | awk '{
         attr=$1;
         if (attr == "") next;
@@ -409,7 +420,14 @@ _index_source_a() {
 
 _index_source_b() {
   local out_file="$1"
-  nix eval --impure --raw --expr '
+  local -a nix_args=()
+
+  if declare -F _init_nix_pkg_args >/dev/null 2>&1; then
+    _init_nix_pkg_args
+    nix_args=("${_nix_pkg_args[@]}")
+  fi
+
+  nix eval --impure "${nix_args[@]}" --raw --expr '
     let
       pkgs = import <nixpkgs> {};
       names = builtins.attrNames pkgs;
@@ -467,6 +485,13 @@ build_nix_index() {
   _index_run_stage 55 80 "Source C (recursive flake scan)" "$exp_c" _index_source_c "$tmp_c" || true
   observed_c="$_INDEX_LAST_STAGE_SECS"
 
+  local lines_a=0
+  local lines_b=0
+  local lines_c=0
+  lines_a="$(wc -l < "$tmp_a" 2>/dev/null | tr -d '[:space:]')"
+  lines_b="$(wc -l < "$tmp_b" 2>/dev/null | tr -d '[:space:]')"
+  lines_c="$(wc -l < "$tmp_c" 2>/dev/null | tr -d '[:space:]')"
+
   build_elapsed=$(( SECONDS - build_start ))
   _index_ui_draw 85 "Merging" "deduplicating package rows" "$build_elapsed" 0
 
@@ -498,6 +523,19 @@ build_nix_index() {
     next_b="$(_index_smooth_secs "$exp_b" "$observed_b")"
     next_c="$(_index_smooth_secs "$exp_c" "$observed_c")"
     _index_save_profile "$next_a" "$next_b" "$next_c"
+    {
+      printf '[%s] build failed: no entries produced\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+      printf 'source_a_lines=%s\n' "${lines_a:-0}"
+      printf 'source_b_lines=%s\n' "${lines_b:-0}"
+      printf 'source_c_lines=%s\n' "${lines_c:-0}"
+      if declare -F _init_nix_pkg_args >/dev/null 2>&1; then
+        _init_nix_pkg_args
+        printf 'nix_args=%s\n' "${_nix_pkg_args[*]:-(none)}"
+      else
+        printf 'nix_args=%s\n' '(utils resolver unavailable)'
+      fi
+      printf 'NIX_PATH=%s\n' "${NIX_PATH:-}"
+    } > "$INDEX_REFRESH_ERROR_FILE" 2>/dev/null || true
     _index_ui_draw 100 "Failed" "no entries produced" "$build_elapsed" 0
     _index_ui_end
     echo "Failed to build nixpkgs index from all sources." >&2

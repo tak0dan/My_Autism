@@ -8,7 +8,12 @@ mkdir -p "$NIXORCIST_DESC_CACHE_DIR" 2>/dev/null || true
 
 # Full terminal I/O listener
 source "$ROOT/listener.sh"
-start_nixorcist_listener "$@"
+# Listener is only useful for interactive TTY sessions.
+# In non-interactive command mode (ssh with stdin redirected, scripts, CI),
+# forcing the listener can terminate command flows early.
+if [[ -t 0 && -t 1 ]]; then
+  start_nixorcist_listener "$@"
+fi
 
 # Load directories first
 source "$ROOT/lib/dirs.sh"

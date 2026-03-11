@@ -132,6 +132,142 @@ show_warning() {
   printf '\n  ⚠ %s\n' "$msg"
 }
 
+_ui_supports_color() {
+  [[ -t 1 ]] && [[ -n "${TERM:-}" ]] && [[ "${TERM:-}" != "dumb" ]] && [[ -z "${NO_COLOR:-}" ]]
+}
+
+_ui_color_code() {
+  case "$1" in
+    green) printf '\033[1;32m' ;;
+    yellow) printf '\033[1;33m' ;;
+    red) printf '\033[1;31m' ;;
+    cyan) printf '\033[1;36m' ;;
+    dim) printf '\033[2m' ;;
+    reset) printf '\033[0m' ;;
+    *) printf '' ;;
+  esac
+}
+
+_ui_colorize() {
+  local color="$1"
+  local text="$2"
+  if _ui_supports_color; then
+    printf '%b%s%b' "$(_ui_color_code "$color")" "$text" "$(_ui_color_code reset)"
+  else
+    printf '%s' "$text"
+  fi
+}
+
+_ui_format_duration() {
+  local total="$1"
+  local days=0
+  local hours=0
+  local minutes=0
+
+  if ! [[ "$total" =~ ^-?[0-9]+$ ]]; then
+    printf 'unknown\n'
+    return
+  fi
+
+  if (( total < 0 )); then
+    printf 'unknown\n'
+    return
+  fi
+
+  days=$(( total / 86400 ))
+  hours=$(( (total % 86400) / 3600 ))
+  minutes=$(( (total % 3600) / 60 ))
+
+  if (( days > 0 )); then
+    printf '%dd %02dh\n' "$days" "$hours"
+    return
+  fi
+  if (( hours > 0 )); then
+    printf '%dh %02dm\n' "$hours" "$minutes"
+    return
+  fi
+  printf '%dm\n' "$minutes"
+}
+
+_ui_refresh_slider() {
+  local pct="$1"
+  local width=28
+  local filled=0
+  local empty=0
+  local fill=""
+  local gap=""
+  local color="green"
+  local bar=""
+
+  if (( pct < 0 )); then
+    printf '[????????????????????????????]'
+    return
+  fi
+
+  (( pct < 0 )) && pct=0
+  (( pct > 100 )) && pct=100
+  filled=$(( pct * width / 100 ))
+  empty=$(( width - filled ))
+  printf -v fill '%*s' "$filled" ''
+  printf -v gap '%*s' "$empty" ''
+  fill="${fill// /=}"
+  gap="${gap// /.}"
+  bar="[$fill$gap]"
+
+  if (( pct <= 15 )); then
+    color="red"
+  elif (( pct <= 50 )); then
+    color="yellow"
+  fi
+
+  _ui_colorize "$color" "$bar"
+}
+
+show_refresh_health_panel() {
+  local last_fetch="never"
+  local last_all="never"
+  local age=-1
+  local left=-1
+  local overdue=0
+  local pct=-1
+  local slider=""
+
+  if declare -F index_last_fetch_text >/dev/null 2>&1; then
+    last_fetch="$(index_last_fetch_text)"
+    last_all="$(index_last_all_text)"
+    age="$(index_refresh_age_seconds)"
+    left="$(index_refresh_seconds_left)"
+    overdue="$(index_refresh_overdue_seconds)"
+    pct="$(index_refresh_remaining_percent)"
+  fi
+
+  printf '  Index Refresh Health:\n'
+  show_status_line 'Last index refresh' "$last_fetch"
+  show_status_line 'Last nixorcist all' "$last_all"
+  slider="$(_ui_refresh_slider "$pct")"
+  printf '  %-35s %b\n' 'Refresh window' "$slider"
+
+  if (( left >= 0 )); then
+    show_status_line 'Recommended cadence' 'Refresh once every 7 days'
+    if (( overdue > 0 )); then
+      show_status_line 'Past due by' "$(_ui_colorize red "$(_ui_format_duration "$overdue")")"
+      printf '\n%b\n' "$(_ui_colorize red '        .-.')"
+      printf '%b\n' "$(_ui_colorize red '       (o o)')"
+      printf '%b\n' "$(_ui_colorize red '       | O \\')"
+      printf '%b\n' "$(_ui_colorize red '        \\   \\')"
+      printf '%b\n' "$(_ui_colorize red '         `~~~`')"
+      printf '  %b\n' "$(_ui_colorize red 'You are way past the refresh. Refresh it now or I will proceed to exorcism process.')"
+    else
+      show_status_line 'Time left' "$(_ui_format_duration "$left") left before refresh is recommended"
+    fi
+  else
+    show_status_line 'Recommended cadence' 'Refresh once every 7 days'
+    show_status_line 'Time left' 'unknown until the first successful fetch'
+  fi
+
+  echo
+}
+
 wait_for_key() {
   printf '\n  Press ENTER to continue...'
   read -r
@@ -178,6 +314,7 @@ main_menu() {
     printf '  Manage your NixOS packages interactively.\n'
     printf '  Choose an option below to get started.\n'
     echo
+    show_refresh_health_panel
     
     show_menu_item '1' 'Transaction Builder - Add/Remove packages interactively'
     show_menu_item '2' 'Import from File     - Import packages from a text file'
@@ -306,6 +443,7 @@ direct_commands_menu() {
     
     printf '  Quick access to common nixorcist operations.\n'
     echo
+    show_refresh_health_panel
     
     show_menu_item '1' 'Generate Modules     - Generate from current lock'
     show_menu_item '2' 'Rebuild Hub          - Regenerate all-packages.nix'
@@ -377,6 +515,7 @@ direct_commands_menu() {
         show_logo
         show_section_header 'Full Build with Refresh'
         printf '  Refreshing package index, then running full pipeline...\n\n'
+        index_mark_all_executed
         build_nix_index && generate_modules && regenerate_hub && run_rebuild
         show_success 'Full build with refresh completed.'
         wait_for_key
@@ -410,10 +549,12 @@ view_status_screen() {
   show_status_line 'Packages in lock' "$lock_count"
   show_status_line 'Generated modules' "$module_count"
   echo
+  show_refresh_health_panel
   
   printf '  File Locations:\n'
   show_status_line 'Lock file' "$LOCK_FILE"
   show_status_line 'Modules directory' "$MODULES_DIR"
+  show_status_line 'Index metadata' "$INDEX_STATUS_FILE"
   echo
   
   show_menu_item '1' 'View package list    - Show all packages in lock'

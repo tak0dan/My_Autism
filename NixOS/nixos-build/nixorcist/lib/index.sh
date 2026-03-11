@@ -6,6 +6,8 @@ INDEX_VERSION="3"
 INDEX_VERSION_FILE="$INDEX_DIR/nixpkgs-index.version"
 INDEX_FETCH_TIME_FILE="$INDEX_DIR/index-fetch-seconds.txt"
 INDEX_FETCH_PROFILE_FILE="$INDEX_DIR/index-fetch-profile.txt"
+INDEX_STATUS_FILE="$INDEX_DIR/index-status.txt"
+INDEX_RECOMMENDED_REFRESH_SECS=$((7 * 24 * 60 * 60))
 
 _INDEX_UI_ACTIVE=0
 _INDEX_UI_LINES=7
@@ -14,6 +16,163 @@ _INDEX_EXPECTED_A=8
 _INDEX_EXPECTED_B=8
 _INDEX_EXPECTED_C=14
 _INDEX_LAST_STAGE_SECS=0
+
+_index_valid_epoch() {
+  local v="$1"
+  [[ "$v" =~ ^[0-9]+$ ]] && (( v > 0 ))
+}
+
+_index_now_epoch() {
+  date +%s
+}
+
+_index_read_status_value() {
+  local key="$1"
+  local raw=""
+
+  [[ -f "$INDEX_STATUS_FILE" ]] || return 0
+  raw="$(awk -F'=' -v key="$key" '$1 == key { print substr($0, index($0, "=") + 1); exit }' "$INDEX_STATUS_FILE" 2>/dev/null || true)"
+  printf '%s\n' "$raw"
+}
+
+_index_file_mtime_epoch() {
+  [[ -f "$INDEX_FILE" ]] || return 0
+  stat -c %Y "$INDEX_FILE" 2>/dev/null || true
+}
+
+_index_write_status() {
+  local fetch_epoch="$1"
+  local all_epoch="$2"
+  local fetch_elapsed="$3"
+  local tmp_file=""
+
+  mkdir -p "$INDEX_DIR"
+  tmp_file="$(mktemp)"
+  {
+    printf 'last_fetch_epoch=%s\n' "$fetch_epoch"
+    printf 'last_fetch_human=%s\n' "$(_index_format_epoch "$fetch_epoch")"
+    printf 'last_all_epoch=%s\n' "$all_epoch"
+    printf 'last_all_human=%s\n' "$(_index_format_epoch "$all_epoch")"
+    printf 'last_fetch_duration_seconds=%s\n' "$fetch_elapsed"
+    printf 'recommended_refresh_seconds=%s\n' "$INDEX_RECOMMENDED_REFRESH_SECS"
+  } > "$tmp_file"
+  mv "$tmp_file" "$INDEX_STATUS_FILE"
+}
+
+_index_format_epoch() {
+  local epoch="$1"
+  if ! _index_valid_epoch "$epoch"; then
+    printf 'never\n'
+    return
+  fi
+  date -d "@$epoch" '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null || printf '%s\n' "$epoch"
+}
+
+index_last_fetch_epoch() {
+  local epoch=""
+
+  epoch="$(_index_read_status_value last_fetch_epoch)"
+  if _index_valid_epoch "$epoch"; then
+    printf '%s\n' "$epoch"
+    return
+  fi
+
+  epoch="$(_index_file_mtime_epoch)"
+  if _index_valid_epoch "$epoch"; then
+    printf '%s\n' "$epoch"
+    return
+  fi
+
+  printf '0\n'
+}
+
+index_last_all_epoch() {
+  local epoch=""
+  epoch="$(_index_read_status_value last_all_epoch)"
+  if _index_valid_epoch "$epoch"; then
+    printf '%s\n' "$epoch"
+    return
+  fi
+  printf '0\n'
+}
+
+index_last_fetch_text() {
+  _index_format_epoch "$(index_last_fetch_epoch)"
+}
+
+index_last_all_text() {
+  _index_format_epoch "$(index_last_all_epoch)"
+}
+
+index_refresh_age_seconds() {
+  local now=0
+  local fetch_epoch=0
+
+  fetch_epoch="$(index_last_fetch_epoch)"
+  if ! _index_valid_epoch "$fetch_epoch"; then
+    printf '%s\n' '-1'
+    return
+  fi
+
+  now="$(_index_now_epoch)"
+  printf '%s\n' "$(( now - fetch_epoch ))"
+}
+
+index_refresh_seconds_left() {
+  local age=0
+  age="$(index_refresh_age_seconds)"
+  if (( age < 0 )); then
+    printf '%s\n' '-1'
+    return
+  fi
+  if (( age >= INDEX_RECOMMENDED_REFRESH_SECS )); then
+    printf '0\n'
+    return
+  fi
+  printf '%s\n' "$(( INDEX_RECOMMENDED_REFRESH_SECS - age ))"
+}
+
+index_refresh_overdue_seconds() {
+  local age=0
+  age="$(index_refresh_age_seconds)"
+  if (( age <= INDEX_RECOMMENDED_REFRESH_SECS )); then
+    printf '0\n'
+    return
+  fi
+  printf '%s\n' "$(( age - INDEX_RECOMMENDED_REFRESH_SECS ))"
+}
+
+index_refresh_remaining_percent() {
+  local left=0
+  left="$(index_refresh_seconds_left)"
+  if (( left < 0 )); then
+    printf '%s\n' '-1'
+    return
+  fi
+  printf '%s\n' "$(( left * 100 / INDEX_RECOMMENDED_REFRESH_SECS ))"
+}
+
+index_mark_fetch_updated() {
+  local fetch_epoch=0
+  local all_epoch=0
+  local fetch_elapsed="${1:-0}"
+
+  fetch_epoch="$(_index_now_epoch)"
+  all_epoch="$(index_last_all_epoch)"
+  _index_write_status "$fetch_epoch" "$all_epoch" "$fetch_elapsed"
+}
+
+index_mark_all_executed() {
+  local fetch_epoch=0
+  local all_epoch=0
+  local fetch_elapsed=""
+
+  fetch_epoch="$(index_last_fetch_epoch)"
+  all_epoch="$(_index_now_epoch)"
+  fetch_elapsed="$(_index_read_status_value last_fetch_duration_seconds)"
+  [[ "$fetch_elapsed" =~ ^[0-9]+$ ]] || fetch_elapsed=0
+  _index_write_status "$fetch_epoch" "$all_epoch" "$fetch_elapsed"
+}
 
 _is_valid_fetch_seconds() {
   local v="$1"
@@ -270,36 +429,7 @@ _index_source_b() {
 
 _index_source_c() {
   local out_file="$1"
-  nix eval --impure --raw --expr '
-    let
-      flake = builtins.getFlake "flake:nixpkgs";
-      pkgs = flake.legacyPackages.${builtins.currentSystem};
-
-      walk = depth: prefix: attrs:
-        if depth > 2 || !(builtins.isAttrs attrs) then
-          []
-        else
-          builtins.concatLists (map (name:
-            let
-              path = if prefix == "" then name else prefix + "." + name;
-              valueEval = builtins.tryEval attrs.${name};
-            in
-              if !valueEval.success then
-                []
-              else
-                let
-                  value = valueEval.value;
-                  isAttrs = builtins.isAttrs value;
-                  isDrv = isAttrs && (value.type or null) == "derivation";
-                  desc = if isDrv then (value.meta.description or "") else "";
-                  line = [ (path + "|" + desc) ];
-                  next = if isAttrs && !isDrv then walk (depth + 1) path value else [];
-                in
-                  line ++ next
-          ) (builtins.attrNames attrs));
-    in
-      builtins.concatStringsSep "\n" (walk 0 "" pkgs)
-  ' > "$out_file" 2>/dev/null
+  : > "$out_file"
 }
 
 build_nix_index() {
@@ -384,8 +514,31 @@ build_nix_index() {
   next_b="$(_index_smooth_secs "$exp_b" "$observed_b")"
   next_c="$(_index_smooth_secs "$exp_c" "$observed_c")"
   _index_save_profile "$next_a" "$next_b" "$next_c"
+  index_mark_fetch_updated "$build_elapsed"
   _index_ui_draw 100 "Done" "$line_count entries cached" "$build_elapsed" 0
   _index_ui_end
 
   echo "Index written to $INDEX_FILE ($line_count entries)" >&2
+}
+
+# Return the path to the package index file
+get_index_file() {
+  printf '%s\n' "$INDEX_FILE"
+}
+
+# Ensure index exists and is valid; build if missing or stale
+ensure_index() {
+  local index_version=""
+
+  # Check if index file exists and version matches
+  if [[ -f "$INDEX_FILE" ]] && [[ -f "$INDEX_VERSION_FILE" ]]; then
+    index_version="$(cat "$INDEX_VERSION_FILE" 2>/dev/null || true)"
+    if [[ "$index_version" == "$INDEX_VERSION" ]] && [[ -s "$INDEX_FILE" ]]; then
+      # Index is valid and current
+      return 0
+    fi
+  fi
+
+  # Index missing, stale, or invalid - rebuild it
+  build_nix_index
 }

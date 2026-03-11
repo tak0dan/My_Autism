@@ -1,4 +1,46 @@
+<<<<<<< HEAD
 # nixorcist - The Declarative NixOS Package Sorcerer
+=======
+
+# 🧙 Nixorcist
+
+**Nixorcist** is a modular package orchestration system for **NixOS** that manages packages through generated modules instead of manually editing `environment.systemPackages`.
+
+It introduces a **lock-driven workflow**, where the desired package list becomes the source of truth and everything else is generated automatically.
+
+The project is designed to:
+
+- Reduce manual editing of `configuration.nix`
+- Keep packages modular
+- Allow safe and reproducible rebuilds
+- Provide an interactive way to search and add packages
+- Automatically resolve some rebuild warnings
+- Separate *package intent* from *system configuration structure*
+
+---
+
+# Philosophy
+
+Traditional NixOS setups usually look like this:
+
+```nix
+environment.systemPackages = with pkgs; [
+  firefox
+  git
+  neovim
+  ripgrep
+];
+````
+
+This works, but as systems grow it becomes harder to manage:
+
+* large monolithic lists
+* duplicate declarations
+* hard to split packages logically
+* harder to automate
+
+**Nixorcist** changes the workflow:
+>>>>>>> 4f02bdbf2139fcac3c530f5ffe11a9a337457ff2
 
 ```
   ╔═══════════════════════════════════════════════════════╗

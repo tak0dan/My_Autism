@@ -33,11 +33,16 @@ nano|Nano editor
 IDX
 printf '3\n' > "$ROOT/cache/nixpkgs-index.version"
 
+# shellcheck disable=SC1091
 source "$ROOT/lib/cli.sh"
+# shellcheck disable=SC1091
 source "$ROOT/lib/index.sh"
+# shellcheck disable=SC1091
 source "$ROOT/lib/utils.sh"
+# shellcheck disable=SC1091
 source "$ROOT/lib/lock.sh"
 
+# Stubs to avoid noise during tests.
 show_logo() { :; }
 show_section_header() { :; }
 show_section() { :; }
@@ -49,6 +54,7 @@ show_info() { :; }
 nixorcist_trace() { :; }
 nixorcist_trace_selection() { :; }
 
+# Keep utils lookups deterministic for tests.
 _flake_attr_kind() {
   case "$1" in
     eclipses) echo attrset ;;
@@ -83,6 +89,7 @@ _flake_attr_long_description() {
   esac
 }
 
+# 1) Attrset decision menu test (eclipses + W)
 log "TEST-BEFORE" "Goal=Attrset decision menu for eclipses using W select-all"
 TX_QUERY_ADD=()
 printf 'w\n' | {
@@ -106,14 +113,17 @@ fzf() {
       printf 'swaync\n'
       printf '__OWNER_SEARCH__\tOWNER SEARCH FROM CURRENT QUERY\n'
       ;;
+    # Menu B: choose owner candidate
     2)
       printf 'enter\n'
       printf 'swaync.package\n'
       ;;
+    # Approval menu: choose No
     3)
       printf 'enter\n'
       printf 'No - keep selection unchanged\n'
       ;;
+    # Menu A again: pick nano to finish
     4)
       printf 'enter\n'
       printf 'nano\n'
@@ -128,6 +138,7 @@ selected="$(transaction_pick_from_index)"
 [[ "$selected" == "nano" ]]
 log "TEST-AFTER" "Result=PASS two-menu flow returned to menu A and did not auto-add owner"
 
+# 3) Edge test: empty/invalid token sanitize path
 log "TEST-BEFORE" "Goal=Edge token validation"
 transaction_add_to_query add "   " >/dev/null
 if transaction_add_to_query add "bad token" >/dev/null 2>&1; then
@@ -136,6 +147,7 @@ if transaction_add_to_query add "bad token" >/dev/null 2>&1; then
 fi
 log "TEST-AFTER" "Result=PASS invalid token rejected"
 
+# 4) Description cache test in-session
 log "TEST-BEFORE" "Goal=Description cache reuse"
 export NIXORCIST_DESC_CACHE_DIR="$sandbox/desc-cache"
 mkdir -p "$NIXORCIST_DESC_CACHE_DIR"
@@ -145,6 +157,7 @@ get_pkg_preview_text "nano" >/dev/null
 [[ -f "$NIXORCIST_DESC_CACHE_DIR/nano.long" ]]
 log "TEST-AFTER" "Result=PASS description cache files present"
 
+# 5) Timing probes for key commands/functions
 log "TEST-BEFORE" "Goal=Timing probes for core command paths"
 start=$SECONDS
 ensure_index >/dev/null

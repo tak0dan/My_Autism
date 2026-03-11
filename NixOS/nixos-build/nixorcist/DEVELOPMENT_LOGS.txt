@@ -1,3 +1,45 @@
+2026-03-11 17:47:37 | INIT | Goal: validate timings/logic/two-menu/attrset in temp repo only | Counter=0
+2026-03-11 17:48:57 | CHANGE-BEFORE | Goal=Add automated harness for timings/edge/two-menu/attrset | Counter=0
+2026-03-11 17:48:57 | CHANGE-AFTER | Result=Created dev_test_harness.sh initial version | Counter=0
+2026-03-11 17:49:11 | CHANGE-BEFORE | Goal=Fix harness defects before first run | Counter=0
+2026-03-11 17:49:11 | CHANGE-AFTER | Result=Patched nameref and timing fzf stubs in harness | Counter=0
+2026-03-11 17:50:28 | TEST-BEFORE | Name=HarnessFullRun | Counter=0
+2026-03-11 17:50:28 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-11 17:50:35 | TEST-BEFORE | Name=HarnessFullRun | Counter=0
+2026-03-11 17:50:36 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-11 17:50:36 | TEST-AFTER | Name=HarnessFullRun | Exit=1 | Counter=0
+2026-03-11 17:51:59 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-11 17:52:27 | ASSUMPTION-FAILED | Detail=resolved array declaration behaved as scalar in attrset W flow | Counter=1
+2026-03-11 17:52:27 | CHANGE-BEFORE | Goal=Declare resolved containers as arrays in lock attrset flows | Counter=1
+2026-03-11 17:52:27 | CHANGE-AFTER | Result=Updated local resolved to local -a resolved in 4 functions | Counter=1
+2026-03-11 17:52:33 | TEST-BEFORE | Name=HarnessFullRun-AfterArrayFix | Counter=1
+2026-03-11 17:52:33 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-11 17:52:33 | TEST-AFTER | Name=HarnessFullRun-AfterArrayFix | Exit=1 | Counter=1
+2026-03-11 17:52:49 | ASSUMPTION-FAILED | Detail=resolve_entry_to_packages shadowed nameref target with local resolved symbol | Counter=2
+2026-03-11 17:52:49 | CHANGE-BEFORE | Goal=Stop nameref shadowing in resolve_entry_to_packages | Counter=2
+2026-03-11 17:52:49 | CHANGE-AFTER | Result=Renamed local resolved helper to resolved_pkg in utils resolve function | Counter=2
+2026-03-11 17:52:49 | TEST-BEFORE | Name=HarnessFullRun-AfterShadowFix | Counter=2
+2026-03-11 17:52:49 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-11 17:52:49 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=0
+2026-03-11 17:52:49 | TEST-BEFORE | Goal=True two-menu fzf flow for swaync owner search with explicit approval=no | Counter=0
+2026-03-11 17:52:49 | TEST-AFTER | Name=HarnessFullRun-AfterShadowFix | Exit=1 | Counter=2
+2026-03-11 17:52:56 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-11 17:52:56 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=0
+2026-03-11 17:52:56 | TEST-BEFORE | Goal=True two-menu fzf flow for swaync owner search with explicit approval=no | Counter=0
+2026-03-11 17:53:17 | ASSUMPTION-FAILED | Detail=fzf mock did not drain stdin causing pipefail in command substitution | Counter=3
+2026-03-11 17:53:17 | CHANGE-BEFORE | Goal=Stabilize harness fzf mocks under pipefail pipelines | Counter=3
+2026-03-11 17:53:17 | CHANGE-AFTER | Result=fzf mocks now drain stdin before scripted responses | Counter=3
+2026-03-11 17:53:17 | TEST-BEFORE | Name=HarnessFullRun-AfterFzfDrainFix | Counter=3
+2026-03-11 17:53:17 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-11 17:53:17 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=0
+2026-03-11 17:53:17 | TEST-BEFORE | Goal=True two-menu fzf flow for swaync owner search with explicit approval=no | Counter=0
+2026-03-11 17:56:00 | ASSUMPTION-FAILED | Detail=owner-search fixture lacked deeper path so no owner candidate could exist for swaync query | Counter=4
+2026-03-11 17:56:00 | CHANGE-BEFORE | Goal=Improve harness owner-search fixture for true menu-A->menu-B path | Counter=4
+2026-03-11 17:56:00 | CHANGE-AFTER | Result=Added swaync.package.service and owner menu now selects swaync.package | Counter=4
+2026-03-11 17:56:00 | TEST-BEFORE | Name=HarnessFullRun-AfterOwnerFixtureFix | Counter=4
+2026-03-11 17:56:00 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-11 17:56:00 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=0
+2026-03-11 17:56:00 | TEST-BEFORE | Goal=True two-menu fzf flow for swaync owner search with explicit approval=no | Counter=0
 2026-03-11 18:00:03 | INIT | Goal: validate timings/logic/two-menu/attrset in temp repo only with nested nixorcist-old layout | Counter=4
 2026-03-11 18:00:03 | CHANGE-BEFORE | Goal=Reapply active fixes and harness to refreshed temp copy after old-path move | Counter=4
 2026-03-11 18:00:03 | CHANGE-AFTER | Result=Refreshed temp tree now matches nested nixorcist-old layout and includes current harness/fixes | Counter=4

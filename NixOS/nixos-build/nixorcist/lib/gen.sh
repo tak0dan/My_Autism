@@ -1,16 +1,5 @@
 #!/usr/bin/env bash
 
-is_derivation() {
-  local pkg="$1"
-  nix eval --impure --expr "
-    let
-      pkgs = import <nixpkgs> {};
-      val = builtins.tryEval pkgs.${pkg};
-    in
-      val.success && builtins.isAttrs val.value && (val.value.type or null) == \"derivation\"
-  " 2>/dev/null | grep -q true
-}
-
 purge_all_modules() {
   if [[ ! -d "$MODULES_DIR" ]] || [[ ! -f "$LOCK_FILE" ]]; then
     show_info "Nothing to purge."

@@ -163,95 +163,148 @@ transaction_expand_and_stage() {
 transaction_handle_attrset() {
   local mode="$1"
   local attrset="$2"
-  local pkg_count="$(count_attrset_packages "$attrset")"
-  local choice resolved=()
-  
-  show_section "Attrset: $attrset ($pkg_count packages)"
-  echo "  This is an attribute set containing multiple packages."
+  local pkg_count
+  pkg_count="$(count_attrset_packages "$attrset")"
+
+  show_section "Attribute Set: $attrset"
+  echo "  Your selection is a non-package attribute set ($pkg_count packages)."
   echo
-  echo "  What would you like to do?"
-  echo "    [1] Browse  - Select specific packages from this attrset"
-  echo "    [2] All     - Add/remove all packages from this attrset"
-  echo "    [3] First   - Use the first (closest) package"
-  echo "    [4] Skip    - Skip this attrset"
+  printf '  %s\n' "  Y - Select closest match by name"
+  printf '  %s\n' "  W - Select all associated packages"
+  printf '  %s\n' "  N - Skip this attribute set  (default)"
+  printf '  %s\n' "  M - Manually select from associated packages"
+  printf '  %s\n' "  A - Recursively select ALL associated packages"
   echo
-  read -r -p "  Choose [1-4]: " choice
-  
-  case "$choice" in
-    1)
-      # Browse attrset packages with fzf
-      local selected
-      selected=$(list_attrset_children "$attrset" | sort -u | fzf --multi \
-        --prompt="SELECT FROM $attrset > " \
-        --header="TAB=multi | ENTER=confirm | ESC=cancel" \
-        --preview "get_pkg_description $attrset.{}")
-      
-      if [[ -n "$selected" ]]; then
-        local pkg_name
-        while IFS= read -r pkg_name; do
-          [[ -z "$pkg_name" ]] && continue
-          local full_pkg="$attrset.$pkg_name"
-          if [[ "$mode" == "add" ]]; then
-            TX_ADD["$full_pkg"]=1
-            unset TX_REMOVE["$full_pkg"] 2>/dev/null || true
-          else
-            TX_REMOVE["$full_pkg"]=1
-            unset TX_ADD["$full_pkg"] 2>/dev/null || true
-          fi
-        done <<< "$selected"
-        show_item "✓" "Selected ${#selected}/$(echo "$selected" | wc -l) from $attrset"
-        return 0
-      else
-        show_item "⊘" "Browse cancelled"
-        return 1
-      fi
-      ;;
-    2)
-      # Select all packages from attrset
-      if resolve_entry_to_packages "$attrset" resolved; then
-        for pkg in "${resolved[@]}"; do
-          if [[ "$mode" == "add" ]]; then
-            TX_ADD["$pkg"]=1
-            unset TX_REMOVE["$pkg"] 2>/dev/null || true
-          else
-            TX_REMOVE["$pkg"]=1
-            unset TX_ADD["$pkg"] 2>/dev/null || true
-          fi
-        done
-        show_item "✓" "Selected all packages from $attrset (${#resolved[@]})"
-        return 0
-      else
-        show_error "No packages found in $attrset"
-        return 1
-      fi
-      ;;
-    3)
-      # Get closest (first) package from attrset
-      if resolve_entry_to_packages "$attrset" resolved; then
-        local closest="${resolved[0]}"
-        if [[ "$mode" == "add" ]]; then
-          TX_ADD["$closest"]=1
-          unset TX_REMOVE["$closest"] 2>/dev/null || true
-        else
-          TX_REMOVE["$closest"]=1
-          unset TX_ADD["$closest"] 2>/dev/null || true
-        fi
-        show_item "✓" "Selected closest package: $closest"
-        return 0
-      else
-        show_error "No packages found in $attrset"
-        return 1
-      fi
-      ;;
-    4)
+
+  local raw_choice first_char
+  read -r -p "  [y/w/N/m/a]: " raw_choice || true
+  first_char="${raw_choice,,}"
+  first_char="${first_char:0:1}"
+  [[ -z "$first_char" ]] && first_char="n"
+
+  case "$first_char" in
+    y) _attrset_select_closest "$mode" "$attrset" ;;
+    w) _attrset_select_all     "$mode" "$attrset" ;;
+    m) _attrset_select_manual  "$mode" "$attrset" ;;
+    a) _attrset_select_recursive "$mode" "$attrset" 0 ;;
+    *)
       show_item "⊘" "Skipped: $attrset"
       return 1
       ;;
-    *)
-      show_error "Invalid choice"
-      return 1
-      ;;
   esac
+}
+
+# ---------- attrset resolution helpers ----------
+
+# Stage a single package token into TX_ADD or TX_REMOVE.
+_attrset_stage_pkg() {
+  local mode="$1" pkg="$2"
+  if [[ "$mode" == "add" ]]; then
+    TX_ADD["$pkg"]=1
+    unset "TX_REMOVE[$pkg]" 2>/dev/null || true
+  else
+    TX_REMOVE["$pkg"]=1
+    unset "TX_ADD[$pkg]" 2>/dev/null || true
+  fi
+}
+
+# Y — pick the first / closest-named package from the attrset.
+_attrset_select_closest() {
+  local mode="$1" attrset="$2"
+  local resolved=()
+  if resolve_entry_to_packages "$attrset" resolved && [[ ${#resolved[@]} -gt 0 ]]; then
+    _attrset_stage_pkg "$mode" "${resolved[0]}"
+    show_item "✓" "Selected closest: ${resolved[0]}"
+    return 0
+  fi
+  show_error "No packages found in $attrset"
+  return 1
+}
+
+# W — stage every package directly under the attrset (one level only).
+_attrset_select_all() {
+  local mode="$1" attrset="$2"
+  local resolved=()
+  if resolve_entry_to_packages "$attrset" resolved && [[ ${#resolved[@]} -gt 0 ]]; then
+    local pkg
+    for pkg in "${resolved[@]}"; do
+      _attrset_stage_pkg "$mode" "$pkg"
+    done
+    show_item "✓" "Selected all ${#resolved[@]} packages from $attrset"
+    return 0
+  fi
+  show_error "No packages found in $attrset"
+  return 1
+}
+
+# M — fzf multi-select; sub-attrsets trigger another prompt recursively.
+_attrset_select_manual() {
+  local mode="$1" attrset="$2"
+  local selected child full child_type
+
+  selected=$(list_attrset_children "$attrset" | sort -u | fzf --multi \
+    --prompt="SELECT FROM $attrset > " \
+    --header="TAB=multi-select | ENTER=confirm | ESC=cancel" \
+    --preview "get_pkg_description $attrset.{}") || true
+
+  if [[ -z "$selected" ]]; then
+    show_item "⊘" "Selection cancelled"
+    return 1
+  fi
+
+  while IFS= read -r child; do
+    [[ -z "$child" ]] && continue
+    full="$attrset.$child"
+    child_type=$(get_pkg_type "$full")
+    case "$child_type" in
+      package)
+        _attrset_stage_pkg "$mode" "$full"
+        ;;
+      attrset)
+        # Recurse: the sub-attrset itself triggers a new resolution prompt.
+        transaction_handle_attrset "$mode" "$full"
+        ;;
+      *)
+        show_warning "Could not resolve: $full"
+        ;;
+    esac
+  done <<< "$selected"
+  return 0
+}
+
+# A — recursively stage EVERY leaf package under attrset (depth-limited).
+_attrset_select_recursive() {
+  local mode="$1" attrset="$2" depth="${3:-0}"
+  local children child full child_type count=0
+
+  if [[ "$depth" -gt 5 ]]; then
+    show_warning "Max recursion depth reached for $attrset — stopping"
+    return 1
+  fi
+
+  children=$(list_attrset_children "$attrset") || true
+  if [[ -z "$children" ]]; then
+    show_warning "No children found in $attrset"
+    return 1
+  fi
+
+  while IFS= read -r child; do
+    [[ -z "$child" ]] && continue
+    full="$attrset.$child"
+    child_type=$(get_pkg_type "$full")
+    case "$child_type" in
+      package)
+        _attrset_stage_pkg "$mode" "$full"
+        (( count++ )) || true
+        ;;
+      attrset)
+        _attrset_select_recursive "$mode" "$full" $(( depth + 1 ))
+        ;;
+    esac
+  done <<< "$children"
+
+  show_item "✓" "Recursively selected $count package(s) under $attrset"
+  return 0
 }
 
 transaction_pick_from_index() {

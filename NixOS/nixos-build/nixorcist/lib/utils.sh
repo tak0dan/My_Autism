@@ -1,5 +1,35 @@
 #!/usr/bin/env bash
 
+# ---------------------------------------------------------------------------
+# NIX_PATH auto-detection
+# All nix eval calls in this file go through "${_nix_pkg_args[@]}" so that
+# <nixpkgs> resolves even when NIX_PATH is not propagated by sudo.
+# Priority: (1) flake ref  (2) channel auto-detect  (3) NIX_PATH as-is
+# ---------------------------------------------------------------------------
+declare -a _nix_pkg_args=()
+_nix_pkg_args_ready=0
+
+_init_nix_pkg_args() {
+  if [[ "$_nix_pkg_args_ready" -eq 1 ]]; then return 0; fi
+  _nix_pkg_args_ready=1
+  # Already works → nothing extra needed
+  if nix eval --raw --impure --expr 'builtins.toString <nixpkgs>' &>/dev/null; then
+    return 0
+  fi
+  # Try common channel paths (root channels, SUDO_USER channels)
+  local p
+  for p in \
+    "/nix/var/nix/profiles/per-user/root/channels/nixpkgs" \
+    "/root/.nix-defexpr/channels/nixpkgs" \
+    "/nix/var/nix/profiles/per-user/${SUDO_USER:-}/channels/nixpkgs" \
+    "/home/${SUDO_USER:-}/.nix-defexpr/channels/nixpkgs"
+  do
+    if [[ -d "$p" && -f "$p/default.nix" ]]; then
+      _nix_pkg_args=(-I "nixpkgs=$p")
+      return 0
+    fi
+  done
+}
 
 get_index_file() {
   echo "$ROOT/cache/nixpkgs-index.txt"
@@ -8,18 +38,41 @@ get_index_file() {
 ensure_index() {
 
   local index
+  local version_file expected_version current_version
   index=$(get_index_file)
+  version_file="$ROOT/cache/nixpkgs-index.version"
+  expected_version="2"
 
   if [[ ! -f "$index" ]]; then
+    build_nix_index
+    return
+  fi
+
+  current_version=""
+  if [[ -f "$version_file" ]]; then
+    current_version="$(head -n1 "$version_file" 2>/dev/null | tr -d '[:space:]')"
+  fi
+
+  if [[ "$current_version" != "$expected_version" ]]; then
     build_nix_index
   fi
 }
 
 get_pkg_description() {
-  nix eval --impure --raw --expr "
+  local pkg="$1"
+  # Try flake-based lookup first (no NIX_PATH needed)
+  local flake_type
+  flake_type=$(nix eval --impure "nixpkgs#${pkg}.type" 2>/dev/null) || true
+  if [[ "$flake_type" == '"derivation"' ]]; then
+    nix eval --impure --raw "nixpkgs#${pkg}.meta.description" 2>/dev/null || echo "No description"
+    return
+  fi
+  # Fallback: channel-based eval
+  _init_nix_pkg_args
+  nix eval --impure "${_nix_pkg_args[@]}" --raw --expr "
     let
       pkgs = import <nixpkgs> {};
-      val = builtins.tryEval pkgs.${1};
+      val = builtins.tryEval pkgs.${pkg};
     in
       if val.success && builtins.isAttrs val.value && (val.value.type or null) == \"derivation\"
       then
@@ -30,6 +83,7 @@ get_pkg_description() {
       else
         \"Not a package\"
   " 2>/dev/null
+  return 0
 }
 
 list_available_packages() {
@@ -54,20 +108,32 @@ purge_all_modules() {
 # --- package validation ---
 
 is_derivation() {
-  nix eval --impure --expr "
+  local pkg="$1"
+  # Try flake reference first (works on flakes-enabled NixOS without NIX_PATH)
+  local flake_type
+  flake_type=$(nix eval --impure "nixpkgs#${pkg}.type" 2>/dev/null) || true
+  [[ "$flake_type" == '"derivation"' ]] && return 0
+  # Fallback: channel-based eval
+  _init_nix_pkg_args
+  nix eval --impure "${_nix_pkg_args[@]}" --expr "
     let
       pkgs = import <nixpkgs> {};
-      val = pkgs.${1};
+      val = pkgs.${pkg};
     in
       builtins.isAttrs val && (val.type or null) == \"derivation\"
   " 2>/dev/null | grep -q true
 }
 
 is_attrset() {
-  nix eval --impure --expr "
+  local pkg="$1"
+  # Fast path: if it IS a derivation it cannot be an attrset
+  is_derivation "$pkg" && return 1
+  # Channel-based check
+  _init_nix_pkg_args
+  nix eval --impure "${_nix_pkg_args[@]}" --expr "
     let
       pkgs = import <nixpkgs> {};
-      val = builtins.tryEval pkgs.${1};
+      val = builtins.tryEval pkgs.${pkg};
     in
       val.success && builtins.isAttrs val.value &&
       (val.value.type or null) != \"derivation\"
@@ -75,7 +141,8 @@ is_attrset() {
 }
 
 list_attrset_children() {
-  nix eval --impure --raw --expr "
+  _init_nix_pkg_args
+  nix eval --impure "${_nix_pkg_args[@]}" --raw --expr "
     let
       pkgs = import <nixpkgs> {};
     in

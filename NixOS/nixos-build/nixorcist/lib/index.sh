@@ -11,11 +11,11 @@ build_nix_index() {
 
   mkdir -p "$INDEX_DIR"
 
-  local tmp_a tmp_b tmp_all line_count
+  local tmp_a="" tmp_b="" tmp_all="" line_count=""
   tmp_a="$(mktemp)"
   tmp_b="$(mktemp)"
   tmp_all="$(mktemp)"
-  trap 'rm -f "$tmp_a" "$tmp_b" "$tmp_all"' RETURN
+  trap 'rm -f "${tmp_a:-}" "${tmp_b:-}" "${tmp_all:-}"' RETURN
 
   # Source A: broad package list from nix-env (captures nested package attrs).
   if command -v nix-env >/dev/null 2>&1; then

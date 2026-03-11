@@ -6,6 +6,14 @@ clear_screen() {
   clear
 }
 
+# Backward-compatible header helper used by nixorcist.sh command mode.
+show_header() {
+  local title="$1"
+  clear_screen
+  show_logo
+  show_section_header "$title"
+}
+
 show_logo() {
   cat << 'LOGO'
 
@@ -76,6 +84,25 @@ show_input_prompt() {
 show_yes_no_prompt() {
   local question="$1"
   printf '\n  %s [y/n]: ' "$question"
+}
+
+# Backward-compatible command help used by nixorcist.sh help mode.
+show_menu() {
+  show_section_header 'Command Help'
+  printf '  Usage: nixorcist <command> [args]\n\n'
+  show_menu_item 'transaction' 'Interactive transaction builder'
+  show_menu_item 'select' 'Alias for interactive transaction flow'
+  show_menu_item 'import <file>' 'Import packages from a file'
+  show_menu_item 'install <pkg...>' 'Add package(s) from CLI args'
+  show_menu_item 'delete <pkg...>' 'Remove package(s) from CLI args'
+  show_menu_item 'chant <tokens...>' 'Mixed install/delete tokens'
+  show_menu_item 'gen' 'Generate package modules'
+  show_menu_item 'hub' 'Regenerate all-packages hub'
+  show_menu_item 'rebuild' 'Generate + rebuild NixOS'
+  show_menu_item 'purge' 'Remove generated modules and clear lock'
+  show_menu_item 'all' 'Transaction + generate + hub + rebuild'
+  show_menu_item 'help' 'Show this help screen'
+  echo
 }
 
 main_menu() {

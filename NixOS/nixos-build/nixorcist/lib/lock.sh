@@ -1048,11 +1048,7 @@ transaction_menu_loop_tty() {
         show_section_header 'Refreshing Package Index'
         build_nix_index
         show_success 'Package index refreshed'
-<<<<<<< HEAD
-        sleep 1
-=======
         wait_for_key
->>>>>>> 15dfc9fc80647bdbce9b438158447862d5882d4d
         ;;
       0)
         clear

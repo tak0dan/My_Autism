@@ -332,6 +332,7 @@ transaction_pick_from_index() {
   ensure_index
   local index_file="" key="" query="" owner_to_select="" owner_line="" owner="" needle="" choice=""
   local fzf_out="" row=""
+  local approval_out="" approval_key="" approval_pick=""
   local -a out_lines selected_pkgs
   local -A owner_marks=()
 
@@ -365,7 +366,7 @@ transaction_pick_from_index() {
           [[ -z "$pkg" ]] && continue
           mark="${owner_marks[$pkg]:-}"
           if [[ -n "$mark" ]]; then
-            printf '%s\t%s \033[36m<---- OWNDER OF THE %s\033[0m\n' "$pkg" "$pkg" "$mark"
+            printf '%s\t%s \033[36m<=== OWNER OF THE SEARCHED PACKAGE %s\033[0m\n' "$pkg" "$pkg" "$mark"
           else
             printf '%s\t%s\n' "$pkg" "$pkg"
           fi
@@ -427,17 +428,30 @@ transaction_pick_from_index() {
 
       owner="$(_find_owner_for_query "$needle")"
       if [[ -z "$owner" ]]; then
+        echo
         show_warning "No owner package found for: $needle"
+        printf '  Press ENTER to continue...'
+        read -r
         continue
       fi
 
-      choice="$(printf 'Y\nn\n' | fzf --no-multi \
-        --prompt="CONFIRM> " \
-        --header="Package $needle belongs to package $owner. Select this package instead? [Y/n]" \
-        --height=8 --layout=reverse --border)" || true
+      approval_out="$(
+        printf 'Yes - add owner package to selection\nNo - keep owner unselected\n' \
+          | fzf --ansi --no-multi --expect=enter \
+            --prompt="OWNER APPROVAL> " \
+            --header="Owner found: $owner (from query: $needle)" \
+            --preview-window=hidden --height=10 --layout=reverse --border
+      )" || true
 
-      if [[ -z "$choice" || "$choice" == "Y" || "$choice" == "y" ]]; then
-        owner_marks["$owner"]="$needle"
+      mapfile -t out_lines <<< "$approval_out"
+      approval_key="${out_lines[0]:-}"
+      approval_pick="${out_lines[1]:-}"
+
+      # Always annotate owner in menu A so user understands mapping,
+      # even if they decline auto-selecting it.
+      owner_marks["$owner"]="$needle"
+
+      if [[ "$approval_key" == "enter" && "$approval_pick" == Yes* ]]; then
         owner_to_select="$owner"
       fi
       continue

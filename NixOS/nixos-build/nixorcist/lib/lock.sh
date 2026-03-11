@@ -58,6 +58,13 @@ transaction_expand_and_stage() {
     return 1
   fi
 
+  # Check if it's an attrset and handle special menu
+  local entry_type="$(get_pkg_type "$entry")"
+  if [[ "$entry_type" == "attrset" ]]; then
+    transaction_handle_attrset "$mode" "$entry"
+    return $?
+  fi
+
   if ! resolve_entry_to_packages "$entry" resolved; then
     show_error "Skipping empty/invalid: $entry"
     return 1
@@ -78,6 +85,101 @@ transaction_expand_and_stage() {
   else
     show_item "-" "Staged: $entry [${#resolved[@]} package(s)]"
   fi
+  return 0
+}
+
+transaction_handle_attrset() {
+  local mode="$1"
+  local attrset="$2"
+  local pkg_count="$(count_attrset_packages "$attrset")"
+  local choice resolved=()
+  
+  show_section "Attrset: $attrset ($pkg_count packages)"
+  echo "  This is an attribute set containing multiple packages."
+  echo
+  echo "  What would you like to do?"
+  echo "    [1] Browse  - Select specific packages from this attrset"
+  echo "    [2] All     - Add/remove all packages from this attrset"
+  echo "    [3] First   - Use the first (closest) package"
+  echo "    [4] Skip    - Skip this attrset"
+  echo
+  read -r -p "  Choose [1-4]: " choice
+  
+  case "$choice" in
+    1)
+      # Browse attrset packages with fzf
+      local selected
+      selected=$(list_attrset_children "$attrset" | sort -u | fzf --multi \
+        --prompt="SELECT FROM $attrset > " \
+        --header="TAB=multi | ENTER=confirm | ESC=cancel" \
+        --preview "get_pkg_description $attrset.{}")
+      
+      if [[ -n "$selected" ]]; then
+        local pkg_name
+        while IFS= read -r pkg_name; do
+          [[ -z "$pkg_name" ]] && continue
+          local full_pkg="$attrset.$pkg_name"
+          if [[ "$mode" == "add" ]]; then
+            TX_ADD["$full_pkg"]=1
+            unset TX_REMOVE["$full_pkg"] 2>/dev/null || true
+          else
+            TX_REMOVE["$full_pkg"]=1
+            unset TX_ADD["$full_pkg"] 2>/dev/null || true
+          fi
+        done <<< "$selected"
+        show_item "✓" "Selected ${#selected}/$(echo "$selected" | wc -l) from $attrset"
+        return 0
+      else
+        show_item "⊘" "Browse cancelled"
+        return 1
+      fi
+      ;;
+    2)
+      # Select all packages from attrset
+      if resolve_entry_to_packages "$attrset" resolved; then
+        for pkg in "${resolved[@]}"; do
+          if [[ "$mode" == "add" ]]; then
+            TX_ADD["$pkg"]=1
+            unset TX_REMOVE["$pkg"] 2>/dev/null || true
+          else
+            TX_REMOVE["$pkg"]=1
+            unset TX_ADD["$pkg"] 2>/dev/null || true
+          fi
+        done
+        show_item "✓" "Selected all packages from $attrset (${#resolved[@]})"
+        return 0
+      else
+        show_error "No packages found in $attrset"
+        return 1
+      fi
+      ;;
+    3)
+      # Get closest (first) package from attrset
+      if resolve_entry_to_packages "$attrset" resolved; then
+        local closest="${resolved[0]}"
+        if [[ "$mode" == "add" ]]; then
+          TX_ADD["$closest"]=1
+          unset TX_REMOVE["$closest"] 2>/dev/null || true
+        else
+          TX_REMOVE["$closest"]=1
+          unset TX_ADD["$closest"] 2>/dev/null || true
+        fi
+        show_item "✓" "Selected closest package: $closest"
+        return 0
+      else
+        show_error "No packages found in $attrset"
+        return 1
+      fi
+      ;;
+    4)
+      show_item "⊘" "Skipped: $attrset"
+      return 1
+      ;;
+    *)
+      show_error "Invalid choice"
+      return 1
+      ;;
+  esac
 }
 
 transaction_pick_from_index() {
@@ -109,7 +211,7 @@ transaction_unstage_menu() {
 
   if [[ "$mode" == "add" ]]; then
     [[ ${#TX_ADD[@]} -eq 0 ]] && { show_info "No staged installs."; return; }
-    selected=$(printf '%s\n' "${!TX_ADD[@]}" | sort -u | fzf --multi --prompt="UNSTAGE> ")
+    selected=$(printf '%s\n' "${!TX_ADD[@]}" | sort -u | fzf --multi --prompt="UNSTAGE > ")
     [[ -z "$selected" ]] && return
     while IFS= read -r pkg; do
       [[ -z "$pkg" ]] && continue
@@ -117,13 +219,133 @@ transaction_unstage_menu() {
     done <<< "$selected"
   else
     [[ ${#TX_REMOVE[@]} -eq 0 ]] && { show_info "No staged removals."; return; }
-    selected=$(printf '%s\n' "${!TX_REMOVE[@]}" | sort -u | fzf --multi --prompt="UNSTAGE> ")
+    selected=$(printf '%s\n' "${!TX_REMOVE[@]}" | sort -u | fzf --multi --prompt="UNSTAGE > ")
     [[ -z "$selected" ]] && return
     while IFS= read -r pkg; do
       [[ -z "$pkg" ]] && continue
       unset TX_REMOVE["$pkg"]
     done <<< "$selected"
   fi
+}
+
+show_transaction_header() {
+  clear
+  show_header "Transaction Builder"
+  echo
+  printf '  %-45s %s\n' "Queued to Install:" "${#TX_ADD[@]} package(s)"
+  printf '  %-45s %s\n' "Queued to Remove:" "${#TX_REMOVE[@]} package(s)"
+  echo
+  show_divider
+  echo
+}
+
+show_transaction_menu_options() {
+  cat << 'MENU'
+  Interactive Menu - Choose an action:
+
+    [a] or [w]    Stage package for installation
+    [b] or [s]    Unstage from installation
+    [c] or [d]    Stage package for removal
+    [e] or [↓]    Unstage from removal
+    [p]           Preview transaction
+    [y]           Apply transaction
+    [n] or [ESC]  Cancel
+    [?] or [h]    This help
+
+  Tip: Press a key to select or ESC for help
+MENU
+}
+
+transaction_menu_loop_tty() {
+  local action selected item loop_first=1
+
+  while true; do
+    if [[ "$loop_first" == "1" ]]; then
+      show_transaction_header
+      show_transaction_menu_options
+      loop_first=0
+    else
+      show_transaction_header
+      echo "  Enter action [a/b/c/e/p/y/n/?]: "
+    fi
+    
+    # Read single character without waiting for Enter
+    read -r -s -n 1 action 2>/dev/null || action="?"
+    action="${action,,}"
+    clear
+    
+    case "$action" in
+      a|w|1)
+        show_header "Stage Package for Installation"
+        selected="$(transaction_pick_from_index || true)"
+        [[ -z "$selected" ]] && { echo; echo "  Cancelled"; continue; }
+        show_info "Processing selections..."
+        while IFS= read -r item; do
+          [[ -z "$item" ]] && continue
+          transaction_expand_and_stage add "$item" || true
+        done <<< "$selected"
+        show_divider
+        read -r -p "  Press ENTER to continue..."
+        ;;
+      b|s|2)
+        show_header "Unstage from Installation"
+        transaction_unstage_menu add
+        show_divider
+        read -r -p "  Press ENTER to continue..."
+        ;;
+      c|d|3)
+        show_header "Stage Package for Removal"
+        selected="$(transaction_pick_for_remove || true)"
+        [[ -z "$selected" ]] && { echo; echo "  Cancelled"; continue; }
+        show_info "Processing selections..."
+        while IFS= read -r item; do
+          [[ -z "$item" ]] && continue
+          transaction_expand_and_stage remove "$item" || true
+        done <<< "$selected"
+        show_divider
+        read -r -p "  Press ENTER to continue..."
+        ;;
+      e|4)
+        show_header "Unstage from Removal"
+        transaction_unstage_menu remove
+        show_divider
+        read -r -p "  Press ENTER to continue..."
+        ;;
+      p|5)
+        show_header "Transaction Preview"
+        transaction_preview
+        read -r -p "  Press ENTER to continue..."
+        ;;
+      y|6)
+        echo
+        read -r -p "  Apply changes? [y/N]: " confirm
+        case "${confirm,,}" in
+          y)
+            transaction_apply
+            return 0
+            ;;
+          *)
+            show_info "Not applied"
+            ;;
+        esac
+        read -r -p "  Press ENTER to continue..."
+        ;;
+      n|7)
+        echo
+        show_info "Transaction cancelled"
+        return 1
+        ;;
+      \?)
+        show_header "Help"
+        show_transaction_menu_options
+        read -r -p "  Press ENTER to continue..."
+        ;;
+      *)
+        echo "  Invalid key: $action"
+        read -r -p "  Press ENTER to continue..."
+        ;;
+    esac
+  done
 }
 
 transaction_preview() {
@@ -149,14 +371,17 @@ transaction_apply() {
   local -A next=()
   local pkg
 
+  # Start with current lock entries
   for pkg in "${!TX_LOCK[@]}"; do
     next["$pkg"]=1
   done
 
+  # Add new packages
   for pkg in "${!TX_ADD[@]}"; do
     next["$pkg"]=1
   done
 
+  # Remove packages (AFTER additions to handle conflicts properly)
   for pkg in "${!TX_REMOVE[@]}"; do
     unset next["$pkg"]
   done
@@ -168,57 +393,11 @@ transaction_apply() {
 
   write_lock_entries final
   transaction_write_temp
-  show_success "Lock updated"
+  show_success "Lock updated - Changes will be applied on rebuild"
 }
 
 transaction_menu_loop() {
-  local action selected item
-
-  while true; do
-    echo
-    echo "  1) Stage +  2) Unstage +  3) Stage -  4) Unstage -"
-    echo "  5) Preview  6) Apply      7) Cancel"
-    read -r -p "  Choose [1-7]: " action
-
-    case "$action" in
-      1)
-        selected="$(transaction_pick_from_index || true)"
-        [[ -z "$selected" ]] && continue
-        while IFS= read -r item; do
-          [[ -z "$item" ]] && continue
-          transaction_expand_and_stage add "$item" || true
-        done <<< "$selected"
-        ;;
-      2)
-        transaction_unstage_menu add
-        ;;
-      3)
-        selected="$(transaction_pick_for_remove || true)"
-        [[ -z "$selected" ]] && continue
-        while IFS= read -r item; do
-          [[ -z "$item" ]] && continue
-          transaction_expand_and_stage remove "$item" || true
-        done <<< "$selected"
-        ;;
-      4)
-        transaction_unstage_menu remove
-        ;;
-      5)
-        transaction_preview
-        ;;
-      6)
-        transaction_apply
-        return 0
-        ;;
-      7)
-        show_info "Cancelled"
-        return 1
-        ;;
-      *)
-        show_error "Invalid option"
-        ;;
-    esac
-  done
+  transaction_menu_loop_tty
 }
 
 run_transaction_cli() {
@@ -245,13 +424,133 @@ remove_packages() {
 
 handle_missing_package() {
   local missing="$1"
-  local suggested=""
-
-  suggested=$(awk -F'|' '{print $1}' "$(get_index_file)" | grep -i "$missing" | head -50 \
-    | fzf --prompt="Resolve '$missing' > " --header="Pick replacement or ESC to skip" || true)
-
-  [[ -z "$suggested" ]] && return 1
-  transaction_expand_and_stage add "$suggested"
+  local mode="${2:-add}"
+  local similar_pkgs count suggested
+  
+  show_section "Package Not Found: $missing"
+  
+  # Ensure index exists before searching
+  ensure_index
+  
+  # Find similar packages
+  similar_pkgs=$(find_similar_packages "$missing")
+  
+  if [[ -z "$similar_pkgs" ]]; then
+    echo "  No similar packages found."
+    echo
+    read -r -p "  Skip this package? [Y/n]: " choice
+    case "${choice,,}" in
+      n) 
+        # User wants to browse all packages
+        suggested=$(awk -F'|' '{print $1}' "$(get_index_file)" | sort -u | fzf \
+          --prompt="BROWSE ALL PACKAGES > " \
+          --header="Type to filter | ENTER=select | ESC=cancel" \
+          --preview 'get_pkg_description {}' || true)
+        
+        if [[ -n "$suggested" ]]; then
+          if [[ "$mode" == "add" ]]; then
+            TX_ADD["$suggested"]=1
+            unset TX_REMOVE["$suggested"] 2>/dev/null || true
+          else
+            TX_REMOVE["$suggested"]=1
+            unset TX_ADD["$suggested"] 2>/dev/null || true
+          fi
+          show_item "✓" "Selected: $suggested"
+          return 0
+        fi
+        return 1
+        ;;
+      *) 
+        return 0 
+        ;;
+    esac
+  fi
+  
+  # Count matches
+  count=$(echo "$similar_pkgs" | wc -l)
+  echo "  Found $count similar packages."
+  echo
+  echo "  What would you like to do?"
+  echo "    [1] Select Multiple - Choose any packages from matches"
+  echo "    [2] First Match     - Use the first matching package"
+  echo "    [3] Browse All      - Browse all packages in fzf"
+  echo "    [4] Skip            - Skip this package"
+  echo
+  read -r -p "  Choose [1-4]: " choice
+  
+  case "$choice" in
+    1)
+      # Show fzf with similar packages
+      suggested=$(echo "$similar_pkgs" | fzf --multi \
+        --prompt="SELECT FROM MATCHES > " \
+        --header="TAB=multi | ENTER=confirm | ESC=cancel" \
+        --preview 'get_pkg_description {}' || true)
+      
+      if [[ -n "$suggested" ]]; then
+        local pkg_name
+        while IFS= read -r pkg_name; do
+          [[ -z "$pkg_name" ]] && continue
+          if [[ "$mode" == "add" ]]; then
+            TX_ADD["$pkg_name"]=1
+            unset TX_REMOVE["$pkg_name"] 2>/dev/null || true
+          else
+            TX_REMOVE["$pkg_name"]=1
+            unset TX_ADD["$pkg_name"] 2>/dev/null || true
+          fi
+        done <<< "$suggested"
+        show_item "✓" "Selected from similar packages"
+        return 0
+      fi
+      return 1
+      ;;
+    2)
+      # Use first match
+      suggested=$(echo "$similar_pkgs" | head -1)
+      if [[ -n "$suggested" ]]; then
+        if [[ "$mode" == "add" ]]; then
+          TX_ADD["$suggested"]=1
+          unset TX_REMOVE["$suggested"] 2>/dev/null || true
+        else
+          TX_REMOVE["$suggested"]=1
+          unset TX_ADD["$suggested"] 2>/dev/null || true
+        fi
+        show_item "✓" "Selected closest match: $suggested"
+        return 0
+      fi
+      return 1
+      ;;
+    3)
+      # Browse all packages
+      suggested=$(awk -F'|' '{print $1}' "$(get_index_file)" | sort -u | fzf --multi \
+        --prompt="BROWSE ALL PACKAGES > " \
+        --header="Type to filter | TAB=multi | ENTER=confirm | ESC=cancel" \
+        --preview 'get_pkg_description {}' || true)
+      
+      if [[ -n "$suggested" ]]; then
+        while IFS= read -r pkg_name; do
+          [[ -z "$pkg_name" ]] && continue
+          if [[ "$mode" == "add" ]]; then
+            TX_ADD["$pkg_name"]=1
+            unset TX_REMOVE["$pkg_name"] 2>/dev/null || true
+          else
+            TX_REMOVE["$pkg_name"]=1
+            unset TX_ADD["$pkg_name"] 2>/dev/null || true
+          fi
+        done <<< "$suggested"
+        show_item "✓" "Selected from all packages"
+        return 0
+      fi
+      return 1
+      ;;
+    4)
+      show_item "⊘" "Skipped: $missing"
+      return 0
+      ;;
+    *)
+      show_error "Invalid choice"
+      return 1
+      ;;
+  esac
 }
 
 import_from_file() {
@@ -314,22 +613,10 @@ import_from_file() {
     done
   done <<< "$normalized"
 
-  local removed_files=0
-  local pkg file_name
-  remove_staged_modules() {
-    for pkg in "${!TX_REMOVE[@]}"; do
-      file_name="$(module_filename_for_pkg "$pkg")"
-      if [[ -f "$MODULES_DIR/$file_name.nix" ]] && grep -qF "$NIXORCIST_MARKER" "$MODULES_DIR/$file_name.nix" 2>/dev/null; then
-        rm -f "$MODULES_DIR/$file_name.nix"
-        show_item "-" "Removed module: $file_name.nix"
-        ((removed_files++))
-      fi
-    done
-  }
-
   if [[ "${NIXORCIST_IMPORT_AUTO:-0}" == "1" ]]; then
     transaction_apply
     if [[ ${#TX_REMOVE[@]} -gt 0 ]]; then
+      show_info "Removing modules for deleted packages"
       remove_staged_modules
       regenerate_hub
     fi
@@ -350,6 +637,7 @@ import_from_file() {
   esac
 
   if [[ ${#TX_REMOVE[@]} -gt 0 ]]; then
+    show_info "Removing modules for deleted packages"
     remove_staged_modules
     regenerate_hub
   fi
@@ -360,12 +648,12 @@ import_from_file() {
   read -r -p "  Run full pipeline? [y/N]: " run_all_answer
   case "${run_all_answer,,}" in
     y)
-      generate_modules
-      regenerate_hub
+      show_header "Running full pipeline"
       run_rebuild
       ;;
     *)
-      show_info "Import complete"
+      show_info "Import complete (changes saved to lock file)"
+      show_info "Run 'nixorcist rebuild' to apply changes"
       ;;
   esac
 }
@@ -373,6 +661,23 @@ import_from_file() {
 module_filename_for_pkg() {
   local pkg="$1"
   echo "$pkg" | tr '/' '-' | tr ' ' '_' | tr ':' '_'
+}
+
+remove_staged_modules() {
+  local removed_count=0
+  local pkg file_name
+  
+  for pkg in "${!TX_REMOVE[@]}"; do
+    file_name="$(module_filename_for_pkg "$pkg")"
+    if [[ -f "$MODULES_DIR/$file_name.nix" ]] && grep -qF "$NIXORCIST_MARKER" "$MODULES_DIR/$file_name.nix" 2>/dev/null; then
+      rm -f "$MODULES_DIR/$file_name.nix"
+      show_item "-" "Removed module: $file_name.nix"
+      ((removed_count++))
+    fi
+  done
+  
+  [[ $removed_count -gt 0 ]] && return 0
+  return 1
 }
 
 parse_chant_args() {

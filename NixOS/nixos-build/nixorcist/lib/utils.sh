@@ -121,3 +121,36 @@ resolve_entry_to_packages() {
 
   return 1
 }
+
+get_pkg_type() {
+  local entry="$1"
+  if is_derivation "$entry"; then
+    echo "package"
+  elif is_attrset "$entry"; then
+    echo "attrset"
+  else
+    echo "unknown"
+  fi
+}
+
+count_attrset_packages() {
+  local entry="$1"
+  local child resolved count=0
+  
+  while IFS= read -r child; do
+    [[ -z "$child" ]] && continue
+    resolved="$entry.$child"
+    if is_derivation "$resolved"; then
+      ((count++))
+    fi
+  done < <(list_attrset_children "$entry")
+  
+  echo "$count"
+}
+
+find_similar_packages() {
+  local query="$1"
+  local index_file="$(get_index_file)"
+  
+  awk -F'|' -v q="$query" 'tolower($1) ~ tolower(q) {print $1}' "$index_file" 2>/dev/null | sort -u | head -30
+}

@@ -25,7 +25,7 @@ transaction_menu() {
     case "$action" in
       1)
         # Add packages or attrsets
-        pkg=$(printf '%s\n' "${all_pkgs[@]}" | fzf --multi --prompt="ADD> " --preview 'get_pkg_description {}')
+        pkg=$(printf '%s\n' "${all_pkgs[@]}" | fzf --multi --prompt="ADD> " --preview 'pkg="{}"; desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$(get_index_file)"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"')
         [[ -z "$pkg" ]] && continue
         if is_attrset "$pkg"; then
           mapfile -t variants < <(list_attrset_children "$pkg")
@@ -40,7 +40,7 @@ transaction_menu() {
         ;;
       2)
         # Remove packages or attrsets
-        pkg=$(printf '%s\n' "${current[@]}" | fzf --multi --prompt="REMOVE> " --preview 'get_pkg_description {}')
+        pkg=$(printf '%s\n' "${current[@]}" | fzf --multi --prompt="REMOVE> " --preview 'pkg="{}"; desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$(get_index_file)"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"')
         [[ -z "$pkg" ]] && continue
         if is_attrset "$pkg"; then
           mapfile -t variants < <(list_attrset_children "$pkg")

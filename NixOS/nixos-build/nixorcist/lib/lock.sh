@@ -309,13 +309,122 @@ _attrset_select_recursive() {
 
 transaction_pick_from_index() {
   ensure_index
-  awk -F'|' '{print $1}' "$(get_index_file)" \
-    | sed '/^[[:space:]]*$/d' | sort -u \
-    | fzf --multi \
-      --prompt="SELECT> " \
-      --header="TAB mark | ENTER confirm" \
-      --preview 'desc=$(grep "^{}|" "'"$(get_index_file)"'" | cut -d"|" -f2-); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: %s\n" "$desc" "$(get_pkg_description {})"' \
-      --preview-window=down:6:wrap
+  local index_file key query owner_to_select owner_line owner needle choice
+  local fzf_out row
+  local -a out_lines selected_pkgs
+  local -A owner_marks=()
+
+  index_file="$(get_index_file)"
+
+  _find_owner_for_query() {
+    local query_text="$1"
+    awk -F'|' -v q="$query_text" '
+      BEGIN { ql = tolower(q) }
+      {
+        p = $1
+        pl = tolower(p)
+        if (pl == ql) {
+          score = 0
+        } else if (index(pl, ql) == 1) {
+          score = 1
+        } else if (index(pl, ql) > 0) {
+          score = 2
+        } else {
+          next
+        }
+        printf "%d|%08d|%s\n", score, length(p), p
+      }
+    ' "$index_file" | sort -t'|' -k1,1n -k2,2n -k3,3 | head -n1 | cut -d'|' -f3
+  }
+
+  _render_index_rows() {
+    local pkg mark
+    awk -F'|' '{print $1}' "$index_file" | sed '/^[[:space:]]*$/d' | sort -u \
+      | while IFS= read -r pkg; do
+          [[ -z "$pkg" ]] && continue
+          mark="${owner_marks[$pkg]:-}"
+          if [[ -n "$mark" ]]; then
+            printf '%s\t%s \033[36m<---- OWNDER OF THE %s\033[0m\n' "$pkg" "$pkg" "$mark"
+          else
+            printf '%s\t%s\n' "$pkg" "$pkg"
+          fi
+        done
+  }
+
+  while true; do
+    owner_line=""
+    if [[ -n "${owner_to_select:-}" ]]; then
+      owner_line="$(_render_index_rows | awk -F'\t' -v wanted="$owner_to_select" '$1 == wanted { print NR; exit }')"
+      owner_to_select=""
+    fi
+
+    if [[ -n "$owner_line" ]]; then
+      fzf_out="$(_render_index_rows | fzf --ansi --multi \
+        --expect=enter,s \
+        --print-query \
+        --delimiter=$'\t' \
+        --with-nth=2 \
+        --bind "start:pos($owner_line)+toggle" \
+        --prompt="SELECT> " \
+        --header="TAB mark | ENTER confirm | S owner-search from query" \
+        --preview 'pkg=$(printf "%s" "{}" | cut -f1); desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$index_file"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' \
+        --preview-window=down:6:wrap)" || return 1
+    else
+      fzf_out="$(_render_index_rows | fzf --ansi --multi \
+        --expect=enter,s \
+        --print-query \
+        --delimiter=$'\t' \
+        --with-nth=2 \
+        --prompt="SELECT> " \
+        --header="TAB mark | ENTER confirm | S owner-search from query" \
+        --preview 'pkg=$(printf "%s" "{}" | cut -f1); desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$index_file"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' \
+        --preview-window=down:6:wrap)" || return 1
+    fi
+
+    mapfile -t out_lines <<< "$fzf_out"
+    key="${out_lines[0]:-}"
+    query="${out_lines[1]:-}"
+    selected_pkgs=()
+
+    local i
+    for (( i=2; i<${#out_lines[@]}; i++ )); do
+      row="${out_lines[$i]}"
+      [[ -z "$row" ]] && continue
+      selected_pkgs+=("$(printf '%s\n' "$row" | cut -f1)")
+    done
+
+    if [[ "$key" == "s" ]]; then
+      needle="$(sanitize_token "$query")"
+      if [[ -z "$needle" && ${#selected_pkgs[@]} -gt 0 ]]; then
+        needle="${selected_pkgs[0]}"
+      fi
+
+      if [[ -z "$needle" ]]; then
+        show_warning "Type something in the query field first, then press S."
+        continue
+      fi
+
+      owner="$(_find_owner_for_query "$needle")"
+      if [[ -z "$owner" ]]; then
+        show_warning "No owner package found for: $needle"
+        continue
+      fi
+
+      choice="$(printf 'Y\nn\n' | fzf --no-multi \
+        --prompt="CONFIRM> " \
+        --header="Package $needle belongs to package $owner. Select this package instead? [Y/n]" \
+        --height=8 --layout=reverse --border)" || true
+
+      if [[ -z "$choice" || "$choice" == "Y" || "$choice" == "y" ]]; then
+        owner_marks["$owner"]="$needle"
+        owner_to_select="$owner"
+      fi
+      continue
+    fi
+
+    printf '%s\n' "${selected_pkgs[@]}" | sed '/^[[:space:]]*$/d' | sort -u
+    return 0
+  done
 }
 
 transaction_pick_for_remove() {
@@ -326,7 +435,7 @@ transaction_pick_for_remove() {
     | fzf --multi \
       --prompt="REMOVE> " \
       --header="TAB mark | ENTER confirm" \
-      --preview 'get_pkg_description {}' \
+      --preview 'pkg="{}"; desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$(get_index_file)"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' \
       --preview-window=down:4:wrap
 }
 
@@ -764,7 +873,7 @@ handle_missing_package() {
         suggested=$(awk -F'|' '{print $1}' "$(get_index_file)" | sort -u | fzf \
           --prompt="BROWSE ALL PACKAGES > " \
           --header="Type to filter | ENTER=select | ESC=cancel" \
-          --preview 'get_pkg_description {}' || true)
+          --preview 'pkg="{}"; desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$(get_index_file)"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' || true)
         
         if [[ -n "$suggested" ]]; then
           if [[ "$mode" == "add" ]]; then
@@ -803,7 +912,7 @@ handle_missing_package() {
       suggested=$(echo "$similar_pkgs" | fzf --multi \
         --prompt="SELECT FROM MATCHES > " \
         --header="TAB=multi | ENTER=confirm | ESC=cancel" \
-        --preview 'get_pkg_description {}' || true)
+        --preview 'pkg="{}"; desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$(get_index_file)"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' || true)
       
       if [[ -n "$suggested" ]]; then
         local pkg_name
@@ -843,7 +952,7 @@ handle_missing_package() {
       suggested=$(awk -F'|' '{print $1}' "$(get_index_file)" | sort -u | fzf --multi \
         --prompt="BROWSE ALL PACKAGES > " \
         --header="Type to filter | TAB=multi | ENTER=confirm | ESC=cancel" \
-        --preview 'get_pkg_description {}' || true)
+        --preview 'pkg="{}"; desc=$(awk -F"|" -v p="$pkg" "$1==p{sub(/^[^|]*\|/, \"\"); print; exit}" "'"$(get_index_file)"'"); [[ -z "$desc" ]] && desc="No description"; printf "%s\n\nType: indexed entry\n" "$desc"' || true)
       
       if [[ -n "$suggested" ]]; then
         while IFS= read -r pkg_name; do

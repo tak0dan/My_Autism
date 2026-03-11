@@ -78,3 +78,13 @@
 2026-03-11 18:05:36 | TEST-BEFORE | Goal=Timing probes for core command paths | Counter=0
 2026-03-11 18:05:36 | TEST-AFTER | Result=PASS timings ensure_index=0s attrset=0s pick=0s pickResult=nano | Counter=0
 2026-03-11 18:05:36 | TEST-AFTER | Name=HarnessFullRun-AfterTimingProbeFix | Exit=0 | Counter=6
+2026-03-11 18:13:07 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=6
+2026-03-11 18:13:07 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=6
+2026-03-11 18:13:07 | TEST-BEFORE | Goal=True two-menu fzf flow for swaync owner search with explicit approval=no | Counter=6
+2026-03-11 18:13:07 | TEST-AFTER | Result=PASS two-menu flow returned to menu A and did not auto-add owner | Counter=6
+2026-03-11 18:13:07 | TEST-BEFORE | Goal=Edge token validation | Counter=6
+2026-03-11 18:13:07 | TEST-AFTER | Result=PASS invalid token rejected | Counter=6
+2026-03-11 18:13:07 | TEST-BEFORE | Goal=Description cache reuse | Counter=6
+2026-03-11 18:13:07 | TEST-AFTER | Result=PASS description cache files present | Counter=6
+2026-03-11 18:13:07 | TEST-BEFORE | Goal=Timing probes for core command paths | Counter=6
+2026-03-11 18:13:07 | TEST-AFTER | Result=PASS timings ensure_index=0s attrset=0s pick=0s pickResult=nano | Counter=6

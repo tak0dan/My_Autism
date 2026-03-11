@@ -70,6 +70,23 @@ _flake_attr_description() {
   " 2>/dev/null || true
 }
 
+_flake_attr_long_description() {
+  local pkg="$1"
+
+  nix eval --impure --raw --expr "
+    let
+      flake = builtins.getFlake \"flake:nixpkgs\";
+      pkgs = flake.legacyPackages.\${builtins.currentSystem};
+      val = builtins.tryEval pkgs.${pkg};
+      long =
+        if val.success && builtins.isAttrs val.value
+        then (val.value.meta.longDescription or \"\")
+        else \"\";
+    in
+      if long == null then \"\" else long
+  " 2>/dev/null || true
+}
+
 _flake_attr_children() {
   local entry="$1"
 
@@ -90,26 +107,72 @@ get_index_file() {
   echo "$ROOT/cache/nixpkgs-index.txt"
 }
 
+_desc_cache_init() {
+  : "${NIXORCIST_DESC_CACHE_DIR:=/tmp/nixorcist-desc-cache-$$}"
+  mkdir -p "$NIXORCIST_DESC_CACHE_DIR" 2>/dev/null || true
+}
+
+_desc_cache_path() {
+  local field="$1"
+  local pkg="$2"
+  _desc_cache_init
+  printf '%s/%s.%s' "$NIXORCIST_DESC_CACHE_DIR" "$pkg" "$field"
+}
+
+_desc_cache_read() {
+  local field="$1"
+  local pkg="$2"
+  local p
+  p="$(_desc_cache_path "$field" "$pkg")"
+  [[ -f "$p" ]] || return 1
+  cat "$p" 2>/dev/null || return 1
+}
+
+_desc_cache_write() {
+  local field="$1"
+  local pkg="$2"
+  local value="$3"
+  local p
+  p="$(_desc_cache_path "$field" "$pkg")"
+  printf '%s\n' "$value" > "$p" 2>/dev/null || true
+}
+
 ensure_index() {
   local index
   local version_file expected_version current_version
+  local fetch_choice=""
 
   index="$(get_index_file)"
   version_file="$ROOT/cache/nixpkgs-index.version"
   expected_version="3"
 
   if [[ ! -f "$index" ]]; then
-    build_nix_index
-    return
+    show_warning "Local package cache not found. Fetching can take around 20-60 seconds."
+    if [[ -t 0 ]]; then
+      read -r -p "  Fetch package index now? [Y/n]: " fetch_choice || true
+      fetch_choice="${fetch_choice,,}"
+      fetch_choice="${fetch_choice:0:1}"
+      if [[ -n "$fetch_choice" && "$fetch_choice" == "n" ]]; then
+        show_warning "Package fetch cancelled by user."
+        return 1
+      fi
+    fi
+    build_nix_index || return 1
+    return 0
   fi
 
   current_version=""
   if [[ -f "$version_file" ]]; then
     current_version="$(head -n1 "$version_file" 2>/dev/null | tr -d '[:space:]')"
+  else
+    # Keep existing local index instead of forcing a long rebuild.
+    printf '%s\n' "$expected_version" > "$version_file" 2>/dev/null || true
+    return 0
   fi
 
   if [[ "$current_version" != "$expected_version" ]]; then
-    build_nix_index
+    # Prefer fast startup and keep cached entries unless user explicitly refreshes.
+    printf '%s\n' "$expected_version" > "$version_file" 2>/dev/null || true
   fi
 }
 
@@ -131,36 +194,93 @@ index_has_children() {
 
 get_pkg_description() {
   local pkg="$1"
+  local cached_desc=""
   local flake_desc=""
   local flake_type
+  local desc=""
+
+  if cached_desc="$(_desc_cache_read short "$pkg" 2>/dev/null)"; then
+    printf '%s\n' "$cached_desc"
+    return 0
+  fi
 
   flake_desc="$(_flake_attr_description "$pkg")"
   if [[ -n "$flake_desc" ]]; then
-    printf '%s\n' "$flake_desc"
-    return
+    desc="$flake_desc"
+  else
+    flake_type=$(nix eval --impure "nixpkgs#${pkg}.type" 2>/dev/null) || true
+    if [[ "$flake_type" == '"derivation"' ]]; then
+      desc="$(nix eval --impure --raw "nixpkgs#${pkg}.meta.description" 2>/dev/null || true)"
+    else
+      _init_nix_pkg_args
+      desc="$(nix eval --impure "${_nix_pkg_args[@]}" --raw --expr "
+        let
+          pkgs = import <nixpkgs> {};
+          val = builtins.tryEval pkgs.${pkg};
+        in
+          if val.success && builtins.isAttrs val.value && (val.value.type or null) == \"derivation\"
+          then
+            (val.value.meta.description or \"No description\")
+          else if val.success && builtins.isAttrs val.value
+          then
+            \"Attribute set\"
+          else
+            \"Not a package\"
+      " 2>/dev/null || true)"
+    fi
   fi
 
-  flake_type=$(nix eval --impure "nixpkgs#${pkg}.type" 2>/dev/null) || true
-  if [[ "$flake_type" == '"derivation"' ]]; then
-    nix eval --impure --raw "nixpkgs#${pkg}.meta.description" 2>/dev/null || echo "No description"
-    return
+  [[ -z "$desc" ]] && desc="No description"
+  _desc_cache_write short "$pkg" "$desc"
+  printf '%s\n' "$desc"
+}
+
+get_pkg_long_description() {
+  local pkg="$1"
+  local cached_long=""
+  local flake_long=""
+  local long_desc=""
+
+  if cached_long="$(_desc_cache_read long "$pkg" 2>/dev/null)"; then
+    printf '%s\n' "$cached_long"
+    return 0
   fi
 
-  _init_nix_pkg_args
-  nix eval --impure "${_nix_pkg_args[@]}" --raw --expr "
-    let
-      pkgs = import <nixpkgs> {};
-      val = builtins.tryEval pkgs.${pkg};
-    in
-      if val.success && builtins.isAttrs val.value && (val.value.type or null) == \"derivation\"
-      then
-        (val.value.meta.description or \"No description\")
-      else if val.success && builtins.isAttrs val.value
-      then
-        \"Attribute set\"
-      else
-        \"Not a package\"
-  " 2>/dev/null
+  flake_long="$(_flake_attr_long_description "$pkg")"
+  if [[ -n "$flake_long" ]]; then
+    long_desc="$flake_long"
+  else
+    long_desc="$(nix eval --impure --raw "nixpkgs#${pkg}.meta.longDescription" 2>/dev/null || true)"
+  fi
+
+  _desc_cache_write long "$pkg" "$long_desc"
+  printf '%s\n' "$long_desc"
+}
+
+get_pkg_preview_text() {
+  local pkg="$1"
+  local kind=""
+  local short_desc=""
+  local long_desc=""
+
+  kind="$(get_pkg_type "$pkg" 2>/dev/null || true)"
+  short_desc="$(get_pkg_description "$pkg" 2>/dev/null || true)"
+  long_desc="$(get_pkg_long_description "$pkg" 2>/dev/null || true)"
+
+  [[ -z "$kind" ]] && kind="unknown"
+  [[ -z "$short_desc" ]] && short_desc="No short description"
+
+  printf 'Package: %s\n' "$pkg"
+  printf 'Type: %s\n' "$kind"
+  printf '%s\n' '------------------------------------------------------------'
+  printf 'Short Description:\n%s\n' "$short_desc"
+  printf '%s\n' '------------------------------------------------------------'
+  printf 'Long Description:\n'
+  if [[ -n "$long_desc" ]]; then
+    printf '%s\n' "$long_desc"
+  else
+    printf '(No long description)\n'
+  fi
 }
 
 list_available_packages() {

@@ -82,13 +82,13 @@ transaction_add_to_query() {
 }
 
 _fzf_pkg_preview_cmd() {
-  printf 'ROOT=%q; source %q >/dev/null 2>&1; pkg=$(printf "%%s" "{}" | cut -f1); get_pkg_description "$pkg"' \
+  printf 'ROOT=%q; source %q >/dev/null 2>&1; pkg=$(printf "%%s" "{}" | cut -f1); get_pkg_preview_text "$pkg"' \
     "$ROOT" "$ROOT/lib/utils.sh"
 }
 
 _fzf_attrset_child_preview_cmd() {
   local attrset="$1"
-  printf 'ROOT=%q; source %q >/dev/null 2>&1; pkg=%q.$(printf "%%s" "{}"); get_pkg_description "$pkg"' \
+  printf 'ROOT=%q; source %q >/dev/null 2>&1; pkg=%q.$(printf "%%s" "{}"); get_pkg_preview_text "$pkg"' \
     "$ROOT" "$ROOT/lib/utils.sh" "$attrset"
 }
 
@@ -417,7 +417,7 @@ _attrset_select_manual() {
   selected=$(list_attrset_children "$attrset" | sort -u | fzf --multi \
     --prompt="SELECT FROM $attrset > " \
     --header="TAB=multi-select | ENTER=confirm | ESC=cancel" \
-    --preview "get_pkg_description $attrset.{}") || true
+    --preview "$(_fzf_attrset_child_preview_cmd "$attrset")") || true
 
   if [[ -z "$selected" ]]; then
     show_item "⊘" "Selection cancelled"
@@ -480,7 +480,7 @@ _attrset_select_recursive() {
 }
 
 transaction_pick_from_index() {
-  ensure_index >/dev/null 2>&1 || true
+  ensure_index || return 1
   local index_file="" key="" query="" owner_to_select="" owner_line="" owner="" needle="" choice=""
   local fzf_out="" row=""
   local owner_menu_out="" approval_choice=""
@@ -628,10 +628,17 @@ transaction_pick_from_index() {
       # even if they decline auto-selecting it.
       owner_marks["$owner"]="$needle"
 
-      read -r -p "  Add owner package '$owner' for '$needle'? [Y/n]: " approval_choice || true
-      approval_choice="${approval_choice,,}"
-      approval_choice="${approval_choice:0:1}"
-      if [[ -z "$approval_choice" || "$approval_choice" == "y" ]]; then
+      owner_menu_out="$(
+        printf 'Yes - add owner package\nNo - keep selection unchanged\n' \
+          | fzf --ansi --no-multi --expect=enter \
+            --prompt="OWNER APPROVAL> " \
+            --header="Owner found: $owner for query: $needle" \
+            --preview-window=hidden --height=10 --layout=reverse --border
+      )" || true
+
+      mapfile -t out_lines <<< "$owner_menu_out"
+      approval_choice="${out_lines[1]:-}"
+      if [[ "${out_lines[0]:-}" == "enter" && "$approval_choice" == Yes* ]]; then
         owner_to_select="$owner"
       fi
       continue
@@ -1118,7 +1125,7 @@ handle_missing_package() {
         suggested=$(awk -F'|' '{print $1}' "$(get_index_file)" | sort -u | fzf \
           --prompt="BROWSE ALL PACKAGES > " \
           --header="Type to filter | ENTER=select | ESC=cancel" \
-          --preview 'pkg="{}"; get_pkg_description "$pkg"' || true)
+          --preview "$(_fzf_pkg_preview_cmd)" || true)
         
         if [[ -n "$suggested" ]]; then
           if [[ "$mode" == "add" ]]; then
@@ -1158,7 +1165,7 @@ handle_missing_package() {
       suggested=$(echo "$similar_pkgs" | fzf --multi \
         --prompt="SELECT FROM MATCHES > " \
         --header="TAB=multi | ENTER=confirm | ESC=cancel" \
-        --preview 'pkg="{}"; get_pkg_description "$pkg"' || true)
+        --preview "$(_fzf_pkg_preview_cmd)" || true)
       
       if [[ -n "$suggested" ]]; then
         local pkg_name
@@ -1198,7 +1205,7 @@ handle_missing_package() {
       suggested=$(awk -F'|' '{print $1}' "$(get_index_file)" | sort -u | fzf --multi \
         --prompt="BROWSE ALL PACKAGES > " \
         --header="Type to filter | TAB=multi | ENTER=confirm | ESC=cancel" \
-        --preview 'pkg="{}"; get_pkg_description "$pkg"' || true)
+        --preview "$(_fzf_pkg_preview_cmd)" || true)
       
       if [[ -n "$suggested" ]]; then
         while IFS= read -r pkg_name; do

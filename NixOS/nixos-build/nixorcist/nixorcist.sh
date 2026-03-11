@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT="/etc/nixos/nixorcist"
 export ROOT
+export NIXORCIST_DESC_CACHE_DIR="/tmp/nixorcist-desc-cache-$$"
+mkdir -p "$NIXORCIST_DESC_CACHE_DIR" 2>/dev/null || true
 
 # Full terminal I/O listener
 source "$ROOT/listener.sh"
@@ -54,6 +56,11 @@ main() {
       show_header "Purging Modules"
       purge_all_modules
       ;;
+    refresh-index|refresh|index)
+      show_header "Refreshing Package Index"
+      build_nix_index
+      show_success "Package index refreshed"
+      ;;
     import)
       if [[ -z "${2:-}" ]]; then
         show_error "import requires a file path"
@@ -94,7 +101,15 @@ main() {
       chant_from_args "$@"
       ;;
     all)
+      local refresh_first=0
+      if [[ "${2:-}" == "--refresh-index" || "${2:-}" == "--refresh" ]]; then
+        refresh_first=1
+      fi
+
       show_header "Full Pipeline: select → gen → hub → rebuild"
+      if [[ "$refresh_first" -eq 1 ]]; then
+        build_nix_index
+      fi
       run_transaction_cli && \
       generate_modules && \
       regenerate_hub && \

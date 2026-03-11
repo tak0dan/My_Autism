@@ -162,8 +162,9 @@ show_menu() {
   show_menu_item 'gen' 'Generate package modules'
   show_menu_item 'hub' 'Regenerate all-packages hub'
   show_menu_item 'rebuild' 'Generate + rebuild NixOS'
+  show_menu_item 'refresh-index' 'Rebuild cached package index'
   show_menu_item 'purge' 'Remove generated modules and clear lock'
-  show_menu_item 'all' 'Transaction + generate + hub + rebuild'
+  show_menu_item 'all [--refresh-index]' 'Transaction + generate + hub + rebuild'
   show_menu_item 'help' 'Show this help screen'
   echo
 }

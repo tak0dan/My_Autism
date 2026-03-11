@@ -54,7 +54,7 @@ main() {
       show_header "Importing from $2"
       import_from_file "$2"
       ;;
-    install|add)
+    install|add|download)
       if [[ $# -lt 2 ]]; then
         show_error "install requires package arguments"
         echo "Usage: nixorcist install <pkg ...>"
@@ -74,7 +74,7 @@ main() {
       shift
       delete_from_args "$@"
       ;;
-    chant)
+    chant|cast)
       if [[ $# -lt 2 ]]; then
         show_error "chant requires package arguments"
         echo "Usage: nixorcist chant <tokens ...>"

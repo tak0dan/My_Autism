@@ -997,19 +997,112 @@ parse_chant_args() {
   done
 }
 
+preplist_file_path() {
+  local target_user target_home
+  target_user="${SUDO_USER:-${USER:-}}"
+  target_home="$(getent passwd "$target_user" 2>/dev/null | cut -d: -f6)"
+  if [[ -z "$target_home" ]]; then
+    target_home="${HOME:-/tmp}"
+  fi
+  printf '%s\n' "$target_home/.cache/nixorcist/preplist.query"
+}
+
+append_current_query_to_preplist() {
+  local preplist_file
+  preplist_file="$(preplist_file_path)"
+  mkdir -p "$(dirname "$preplist_file")"
+
+  {
+    printf '# Appended on %s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+    printf '%s\n' "${!TX_QUERY_ADD[@]}" | sed '/^[[:space:]]*$/d' | sort -u | sed 's/^/+/'
+    printf '%s\n' "${!TX_QUERY_REMOVE[@]}" | sed '/^[[:space:]]*$/d' | sort -u | sed 's/^/-/'
+    echo
+  } >> "$preplist_file"
+
+  show_success "Query appended to preplist: $preplist_file"
+}
+
+confirm_and_apply_query_from_args() {
+  local action_label="$1"
+  local answer first_char
+
+  transaction_stage_query
+
+  while true; do
+    clear
+    show_logo
+    show_section_header "$action_label Query Preview"
+    transaction_preview_query
+    show_section_header "Resolved Packages"
+    transaction_preview
+
+    echo "  Press ENTER to accept the default option."
+    echo "  Default is [Y]es."
+    read -r -p "  INSTALL? [Y/n/a] (y=yes, n=no, a=append, p=preview): " answer
+
+    if [[ -z "$answer" ]]; then
+      first_char="y"
+    else
+      first_char="${answer:0:1}"
+      first_char="${first_char,,}"
+    fi
+
+    case "$first_char" in
+      y)
+        transaction_apply
+        if [[ ${#TX_REMOVE[@]} -gt 0 ]]; then
+          show_info "Removing modules for deleted packages"
+          remove_staged_modules || true
+          regenerate_hub
+        fi
+        show_success "$action_label applied"
+        return 0
+        ;;
+      n)
+        show_warning "$action_label cancelled"
+        return 1
+        ;;
+      a)
+        append_current_query_to_preplist
+        return 0
+        ;;
+      p)
+        # Preview already shown; loop for decision.
+        ;;
+      *)
+        show_error "Invalid choice. Use Y, N, A, or P."
+        ;;
+    esac
+  done
+}
+
 install_from_args() {
   if [[ $# -eq 0 ]]; then
     show_error "install requires at least one package"
     return 1
   fi
 
-  local tmp_file
+  local token
+  ensure_index
+  transaction_init
 
-  tmp_file="$(mktemp /tmp/nixorcist-install-args.XXXXXX)"
-  printf '%s\n' "$@" > "$tmp_file"
+  for token in "$@"; do
+    transaction_add_to_query add "$token" || true
+  done
 
-  NIXORCIST_IMPORT_AUTO=1 import_from_file "$tmp_file" install
-  rm -f "$tmp_file"
+  if ! transaction_has_query; then
+    show_error "No valid packages to add"
+    transaction_cleanup
+    return 1
+  fi
+
+  if confirm_and_apply_query_from_args "Install"; then
+    transaction_cleanup
+    return 0
+  fi
+
+  transaction_cleanup
+  return 1
 }
 
 delete_from_args() {
@@ -1018,15 +1111,27 @@ delete_from_args() {
     return 1
   fi
 
-  local tmp_file
-  tmp_file="$(mktemp /tmp/nixorcist-delete-args.XXXXXX)"
+  local token
+  ensure_index
+  transaction_init
 
-  # Force remove mode first; inline + and - switches are still supported afterwards.
-  printf '%s\n' '-' > "$tmp_file"
-  printf '%s\n' "$@" >> "$tmp_file"
+  for token in "$@"; do
+    transaction_add_to_query remove "$token" || true
+  done
 
-  NIXORCIST_IMPORT_AUTO=1 import_from_file "$tmp_file" delete
-  rm -f "$tmp_file"
+  if ! transaction_has_query; then
+    show_error "No valid packages to remove"
+    transaction_cleanup
+    return 1
+  fi
+
+  if confirm_and_apply_query_from_args "Delete"; then
+    transaction_cleanup
+    return 0
+  fi
+
+  transaction_cleanup
+  return 1
 }
 
 chant_from_args() {
@@ -1035,12 +1140,32 @@ chant_from_args() {
     return 1
   fi
 
-  local tmp_file
-  tmp_file="$(mktemp /tmp/nixorcist-chant-args.XXXXXX)"
-  printf '%s\n' "$@" > "$tmp_file"
+  local add_tokens=()
+  local remove_tokens=()
+  local token
 
-  NIXORCIST_IMPORT_AUTO=1 import_from_file "$tmp_file" chant
-  rm -f "$tmp_file"
+  ensure_index
+  transaction_init
+  parse_chant_args add_tokens remove_tokens "$@"
 
-  show_success "Chant complete"
+  for token in "${add_tokens[@]}"; do
+    transaction_add_to_query add "$token" || true
+  done
+  for token in "${remove_tokens[@]}"; do
+    transaction_add_to_query remove "$token" || true
+  done
+
+  if ! transaction_has_query; then
+    show_error "No valid chant tokens"
+    transaction_cleanup
+    return 1
+  fi
+
+  if confirm_and_apply_query_from_args "Chant"; then
+    transaction_cleanup
+    return 0
+  fi
+
+  transaction_cleanup
+  return 1
 }

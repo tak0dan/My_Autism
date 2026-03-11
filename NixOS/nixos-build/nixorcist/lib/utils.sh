@@ -157,7 +157,8 @@ is_valid_token() {
 
 sanitize_token() {
   local token="$1"
-  token="${token,,}"
+  # Keep original case; Nix attribute paths are case-sensitive.
+  token="${token//$'\r'/}"
   token="$(echo "$token" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
   echo "$token"
 }

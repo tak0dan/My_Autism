@@ -1039,8 +1039,16 @@ transaction_menu_loop_tty() {
         show_logo
         show_refresh_countdown_bar
         show_section_header 'Fetching Package Index (depth 5)'
-        build_nix_index
-        show_success 'Package index fetched and cached'
+        if build_nix_index 5; then
+          show_success 'Package index fetched and cached'
+        else
+          local fetch_rc=$?
+          if [[ "$fetch_rc" -eq 130 ]]; then
+            show_warning 'Package index fetch cancelled by user'
+          else
+            show_error 'Package index fetch failed'
+          fi
+        fi
         wait_for_key
         ;;
       0)
@@ -1530,7 +1538,7 @@ install_from_args() {
   fi
 
   local token
-  ensure_index
+  ensure_index 1
   transaction_init
 
   for token in "$@"; do

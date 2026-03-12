@@ -9,6 +9,7 @@ INDEX_FETCH_PROFILE_FILE="$INDEX_DIR/index-fetch-profile.txt"
 INDEX_STATUS_FILE="$INDEX_DIR/index-status.txt"
 INDEX_REFRESH_ERROR_FILE="$INDEX_DIR/index-refresh-last-error.log"
 INDEX_RECOMMENDED_REFRESH_SECS=$((7 * 24 * 60 * 60))
+INDEX_MIN_VALID_LINES="${NIXORCIST_MIN_INDEX_LINES:-5000}"
 
 _INDEX_UI_ACTIVE=0
 _INDEX_UI_LINES=7
@@ -567,13 +568,27 @@ get_index_file() {
 # Ensure index exists and is valid; build if missing or stale
 ensure_index() {
   local index_version=""
+  local line_count="0"
+  local min_lines="0"
+
+  if [[ "$INDEX_MIN_VALID_LINES" =~ ^[0-9]+$ ]]; then
+    min_lines="$INDEX_MIN_VALID_LINES"
+  else
+    min_lines=5000
+  fi
 
   # Check if index file exists and version matches
   if [[ -f "$INDEX_FILE" ]] && [[ -f "$INDEX_VERSION_FILE" ]]; then
     index_version="$(cat "$INDEX_VERSION_FILE" 2>/dev/null || true)"
     if [[ "$index_version" == "$INDEX_VERSION" ]] && [[ -s "$INDEX_FILE" ]]; then
+      line_count="$(wc -l < "$INDEX_FILE" 2>/dev/null | tr -d '[:space:]')"
+      [[ "$line_count" =~ ^[0-9]+$ ]] || line_count=0
+      if (( line_count < min_lines )); then
+        echo "Index cache too small ($line_count lines, min $min_lines). Rebuilding..." >&2
+      else
       # Index is valid and current
-      return 0
+        return 0
+      fi
     fi
   fi
 

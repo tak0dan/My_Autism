@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Automatic Post-Fresh-Install Setup Script for NixOS + nixorcist
 # Usage: sudo bash install.sh [--skip-upgrade]
 

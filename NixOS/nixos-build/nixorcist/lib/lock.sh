@@ -508,11 +508,12 @@ _attrset_select_recursive() {
 
 transaction_pick_from_index() {
   ensure_index || return 1
-  local index_file="" key="" query="" owner_to_select="" owner_line="" owner="" needle="" choice=""
+  local index_file="" key="" query="" owner="" needle="" choice=""
   local fzf_out="" row=""
   local owner_menu_out="" approval_choice=""
   local -a out_lines selected_pkgs owner_candidates
   local -A owner_marks=()
+  local -A owner_selected=()
   local owner_action_token="__OWNER_SEARCH__"
 
   index_file="$(get_index_file)"
@@ -549,49 +550,32 @@ transaction_pick_from_index() {
   }
 
   _render_index_rows() {
-    local pkg="" mark=""
+    local pkg="" mark="" selected_mark=""
     printf '%s\t%s\n' "$owner_action_token" 'OWNER SEARCH FROM CURRENT QUERY'
     awk -F'|' '{print $1}' "$index_file" | sed '/^[[:space:]]*$/d' | sort -u \
       | while IFS= read -r pkg; do
           [[ -z "$pkg" ]] && continue
           mark="${owner_marks[$pkg]:-}"
+          selected_mark=""
+          [[ -n "${owner_selected[$pkg]:-}" ]] && selected_mark=" [SELECTED]"
           if [[ -n "$mark" ]]; then
-            printf '%s\t%s \033[36m<=== OWNER OF THE SEARCHED PACKAGE %s\033[0m\n' "$pkg" "$pkg" "$mark"
+            printf '%s\t%s%s \033[36m<=== OWNER OF THE SEARCHED PACKAGE %s\033[0m\n' "$pkg" "$pkg" "$selected_mark" "$mark"
           else
-            printf '%s\t%s\n' "$pkg" "$pkg"
+            printf '%s\t%s%s\n' "$pkg" "$pkg" "$selected_mark"
           fi
         done
   }
 
   while true; do
-    owner_line=""
-    if [[ -n "${owner_to_select:-}" ]]; then
-      owner_line="$(_render_index_rows | awk -F'\t' -v wanted="$owner_to_select" '$1 == wanted { print NR; exit }')"
-      owner_to_select=""
-    fi
-
-    if [[ -n "$owner_line" ]]; then
-      fzf_out="$(_render_index_rows | fzf --ansi --multi \
-        --expect=enter,ctrl-o \
-        --print-query \
-        --delimiter=$'\t' \
-        --with-nth=2 \
-        --bind "start:pos($owner_line)+toggle" \
-        --prompt="SELECT> " \
-        --header="TAB mark | ENTER confirm | ctrl-o or OWNER SEARCH row for menu B" \
-        --preview "$(_fzf_pkg_preview_cmd)" \
-        --preview-window=down:6:wrap)" || return 1
-    else
-      fzf_out="$(_render_index_rows | fzf --ansi --multi \
-        --expect=enter,ctrl-o \
-        --print-query \
-        --delimiter=$'\t' \
-        --with-nth=2 \
-        --prompt="SELECT> " \
-        --header="TAB mark | ENTER confirm | ctrl-o or OWNER SEARCH row for menu B" \
-        --preview "$(_fzf_pkg_preview_cmd)" \
-        --preview-window=down:6:wrap)" || return 1
-    fi
+    fzf_out="$(_render_index_rows | fzf --ansi --multi \
+      --expect=enter,ctrl-o,s \
+      --print-query \
+      --delimiter=$'\t' \
+      --with-nth=2 \
+      --prompt="SELECT> " \
+      --header="TAB mark | ENTER confirm | ctrl-o/s or OWNER SEARCH row for owner menu" \
+      --preview "$(_fzf_pkg_preview_cmd)" \
+      --preview-window=down:6:wrap)" || return 1
 
     mapfile -t out_lines <<< "$fzf_out"
     key="${out_lines[0]:-}"
@@ -618,7 +602,7 @@ transaction_pick_from_index() {
       fi
     fi
 
-    if [[ "$key" == "ctrl-o" || "$key" == "OWNER_ACTION" ]]; then
+    if [[ "$key" == "ctrl-o" || "$key" == "s" || "$key" == "OWNER_ACTION" ]]; then
       needle="$(sanitize_token "$query")"
       if [[ -z "$needle" && ${#selected_pkgs[@]} -gt 0 ]]; then
         needle="${selected_pkgs[0]}"
@@ -666,9 +650,16 @@ transaction_pick_from_index() {
       mapfile -t out_lines <<< "$owner_menu_out"
       approval_choice="${out_lines[1]:-}"
       if [[ "${out_lines[0]:-}" == "enter" && "$approval_choice" == Yes* ]]; then
-        owner_to_select="$owner"
+        owner_selected["$owner"]=1
       fi
       continue
+    fi
+
+    if [[ ${#owner_selected[@]} -gt 0 ]]; then
+      local selected_owner=""
+      for selected_owner in "${!owner_selected[@]}"; do
+        selected_pkgs+=("$selected_owner")
+      done
     fi
 
     printf '%s\n' "${selected_pkgs[@]}" | sed '/^[[:space:]]*$/d' | sort -u

@@ -128,3 +128,43 @@
 2026-03-11 18:36:47 | TEST-AFTER | Result=PASS installSourceRegressionRetryExit=0 | Counter=8
 2026-03-11 18:37:10 | TEST-BEFORE | Goal=Validate true-two-menu owner search via keyboard trigger (key=s) instead of OWNER row selection | Approach=mock fzf sequence across menu A, menu B, approval, and return-to-menu-A selection | Intent=prove double-menu path is implemented and functional | Counter=8
 2026-03-11 18:37:10 | TEST-AFTER | Result=PASS ownerSearchKeyboardTriggerExit=0 | Counter=8
+2026-03-12 03:15:50 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-12 03:15:50 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=0
+2026-03-12 03:15:50 | TEST-BEFORE | Goal=True two-menu fzf flow for swaync owner search with explicit approval=no | Counter=0
+2026-03-12 03:15:51 | TEST-AFTER | Result=PASS two-menu flow returned to menu A and did not auto-add owner | Counter=0
+2026-03-12 03:15:51 | TEST-BEFORE | Goal=Edge token validation | Counter=0
+2026-03-12 03:15:51 | TEST-AFTER | Result=PASS invalid token rejected | Counter=0
+2026-03-12 03:15:51 | TEST-BEFORE | Goal=Description cache reuse | Counter=0
+2026-03-12 03:15:51 | TEST-AFTER | Result=PASS description cache files present | Counter=0
+2026-03-12 03:15:51 | TEST-BEFORE | Goal=Timing probes for core command paths | Counter=0
+2026-03-12 03:15:51 | TEST-AFTER | Result=PASS timings ensure_index=0s attrset=0s pick=0s pickResult=nano | Counter=0
+2026-03-12 03:24:04 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-12 03:24:04 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=0
+2026-03-12 03:24:04 | TEST-BEFORE | Goal=True two-menu fzf flow for swaync owner search with explicit approval=no | Counter=0
+2026-03-12 03:24:04 | TEST-AFTER | Result=PASS two-menu flow returned to menu A and did not auto-add owner | Counter=0
+2026-03-12 03:24:04 | TEST-BEFORE | Goal=Edge token validation | Counter=0
+2026-03-12 03:24:04 | TEST-AFTER | Result=PASS invalid token rejected | Counter=0
+2026-03-12 03:24:04 | TEST-BEFORE | Goal=Description cache reuse | Counter=0
+2026-03-12 03:24:04 | TEST-AFTER | Result=PASS description cache files present | Counter=0
+2026-03-12 03:24:04 | TEST-BEFORE | Goal=Timing probes for core command paths | Counter=0
+2026-03-12 03:24:04 | TEST-AFTER | Result=PASS timings ensure_index=0s attrset=0s pick=0s pickResult=nano | Counter=0
+2026-03-12 03:28:04 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-12 03:28:05 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=0
+2026-03-12 03:28:05 | TEST-BEFORE | Goal=True repeated owner-search menu-A->menu-B flow with persistent owner annotations | Counter=0
+2026-03-12 03:28:05 | TEST-AFTER | Result=PASS repeated owner-search stayed in menu A, invoked menu B twice, and returned combined selections | Counter=0
+2026-03-12 03:28:05 | TEST-BEFORE | Goal=Edge token validation | Counter=0
+2026-03-12 03:28:05 | TEST-AFTER | Result=PASS invalid token rejected | Counter=0
+2026-03-12 03:28:05 | TEST-BEFORE | Goal=Description cache reuse | Counter=0
+2026-03-12 03:28:05 | TEST-AFTER | Result=PASS description cache files present | Counter=0
+2026-03-12 03:28:05 | TEST-BEFORE | Goal=Timing probes for core command paths | Counter=0
+2026-03-12 03:28:05 | TEST-AFTER | Result=PASS timings ensure_index=0s attrset=0s pick=0s pickResult=nano | Counter=0
+2026-03-12 03:28:33 | TEST-BEFORE | Goal=Attrset decision menu for eclipses using W select-all | Counter=0
+2026-03-12 03:28:33 | TEST-AFTER | Result=PASS attrset decision selected expected children | Counter=0
+2026-03-12 03:28:33 | TEST-BEFORE | Goal=True repeated owner-search menu-A->menu-B flow with persistent owner annotations | Counter=0
+2026-03-12 03:28:34 | TEST-AFTER | Result=PASS repeated owner-search stayed in menu A, invoked menu B twice, and returned combined selections | Counter=0
+2026-03-12 03:28:34 | TEST-BEFORE | Goal=Edge token validation | Counter=0
+2026-03-12 03:28:34 | TEST-AFTER | Result=PASS invalid token rejected | Counter=0
+2026-03-12 03:28:34 | TEST-BEFORE | Goal=Description cache reuse | Counter=0
+2026-03-12 03:28:34 | TEST-AFTER | Result=PASS description cache files present | Counter=0
+2026-03-12 03:28:34 | TEST-BEFORE | Goal=Timing probes for core command paths | Counter=0
+2026-03-12 03:28:34 | TEST-AFTER | Result=PASS timings ensure_index=0s attrset=0s pick=0s pickResult=nano | Counter=0

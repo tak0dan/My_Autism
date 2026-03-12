@@ -29,6 +29,8 @@ eclipses.eclipse-java|Eclipse Java IDE
 eclipses.eclipse-cpp|Eclipse C++ IDE
 swaync.package|Sway notification center package
 swaync.package.service|Sway notification center service
+waybar.modules|Waybar module owner
+waybar.modules.cpu|Waybar CPU module
 nano|Nano editor
 IDX
 printf '3\n' > "$ROOT/cache/nixpkgs-index.version"
@@ -100,7 +102,7 @@ printf 'w\n' | {
 }
 log "TEST-AFTER" "Result=PASS attrset decision selected expected children"
 
-log "TEST-BEFORE" "Goal=True two-menu fzf flow for swaync owner search with explicit approval=no"
+log "TEST-BEFORE" "Goal=True repeated owner-search menu-A->menu-B flow with persistent owner annotations"
 fzf() {
   local current_call=0
   cat >/dev/null || true
@@ -108,23 +110,40 @@ fzf() {
   current_call=$((current_call + 1))
   printf '%s\n' "$current_call" > "$FZF_CALL_FILE"
   case "$current_call" in
+    # Menu A: owner action from query swaync
     1)
       printf 'enter\n'
       printf 'swaync\n'
       printf '__OWNER_SEARCH__\tOWNER SEARCH FROM CURRENT QUERY\n'
       ;;
-    # Menu B: choose owner candidate
+    # Menu B: choose owner candidate swaync.package
     2)
       printf 'enter\n'
       printf 'swaync.package\n'
       ;;
-    # Approval menu: choose No
+    # Approval menu: choose Yes
     3)
       printf 'enter\n'
-      printf 'No - keep selection unchanged\n'
+      printf 'Yes - add owner package\n'
       ;;
-    # Menu A again: pick nano to finish
+    # Menu A again: owner action from query cpu
     4)
+      printf 'enter\n'
+      printf 'cpu\n'
+      printf '__OWNER_SEARCH__\tOWNER SEARCH FROM CURRENT QUERY\n'
+      ;;
+    # Menu B: choose second owner candidate waybar.modules
+    5)
+      printf 'enter\n'
+      printf 'waybar.modules\n'
+      ;;
+    # Approval menu: choose Yes
+    6)
+      printf 'enter\n'
+      printf 'Yes - add owner package\n'
+      ;;
+    # Menu A again: finalize by selecting nano
+    7)
       printf 'enter\n'
       printf 'nano\n'
       printf 'nano\tnano\n'
@@ -135,8 +154,11 @@ fzf() {
   esac
 }
 selected="$(transaction_pick_from_index)"
-[[ "$selected" == "nano" ]]
-log "TEST-AFTER" "Result=PASS two-menu flow returned to menu A and did not auto-add owner"
+[[ "$(printf '%s\n' "$selected" | sort -u | tr '\n' ' ')" == *"nano"* ]]
+[[ "$(printf '%s\n' "$selected" | sort -u | tr '\n' ' ')" == *"swaync.package"* ]]
+[[ "$(printf '%s\n' "$selected" | sort -u | tr '\n' ' ')" == *"waybar.modules"* ]]
+[[ "$(cat "$FZF_CALL_FILE")" == "7" ]]
+log "TEST-AFTER" "Result=PASS repeated owner-search stayed in menu A, invoked menu B twice, and returned combined selections"
 
 # 3) Edge test: empty/invalid token sanitize path
 log "TEST-BEFORE" "Goal=Edge token validation"

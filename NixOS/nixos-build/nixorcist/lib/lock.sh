@@ -568,12 +568,12 @@ transaction_pick_from_index() {
 
   while true; do
     fzf_out="$(_render_index_rows | fzf --ansi --multi \
-      --expect=enter,ctrl-o,s \
+      --expect=enter,ctrl-o \
       --print-query \
       --delimiter=$'\t' \
       --with-nth=2 \
       --prompt="SELECT> " \
-      --header="TAB mark | ENTER confirm | ctrl-o/s or OWNER SEARCH row for owner menu" \
+      --header="TAB mark | ENTER confirm | ctrl-o or OWNER SEARCH row for owner menu" \
       --preview "$(_fzf_pkg_preview_cmd)" \
       --preview-window=down:6:wrap)" || return 1
 
@@ -602,7 +602,7 @@ transaction_pick_from_index() {
       fi
     fi
 
-    if [[ "$key" == "ctrl-o" || "$key" == "s" || "$key" == "OWNER_ACTION" ]]; then
+    if [[ "$key" == "ctrl-o" || "$key" == "OWNER_ACTION" ]]; then
       needle="$(sanitize_token "$query")"
       if [[ -z "$needle" && ${#selected_pkgs[@]} -gt 0 ]]; then
         needle="${selected_pkgs[0]}"

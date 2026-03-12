@@ -67,8 +67,26 @@ show_header() {
 
 show_logo() {
   local logo_file="${ROOT}/assets/logo.txt"
-  if [[ -f "$logo_file" ]]; then
-    cat "$logo_file"
+  local wide_logo_file="${ROOT}/assets/logo-dual.txt"
+  local selected_logo_file="$logo_file"
+
+  if [[ -f "$wide_logo_file" ]]; then
+    local terminal_cols="${COLUMNS:-0}"
+    if ! [[ "$terminal_cols" =~ ^[0-9]+$ ]] || (( terminal_cols <= 0 )); then
+      terminal_cols="$(tput cols 2>/dev/null || printf '0')"
+    fi
+
+    local wide_logo_width
+    wide_logo_width="$(awk '{ if (length > max) max = length } END { print max + 0 }' "$wide_logo_file" 2>/dev/null || printf '0')"
+    local min_cols_for_wide=$(( (wide_logo_width * 80 + 99) / 100 ))
+
+    if (( wide_logo_width > 0 && terminal_cols >= min_cols_for_wide )); then
+      selected_logo_file="$wide_logo_file"
+    fi
+  fi
+
+  if [[ -f "$selected_logo_file" ]]; then
+    cat "$selected_logo_file"
     echo
     return
   fi

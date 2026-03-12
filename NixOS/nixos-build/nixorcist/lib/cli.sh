@@ -66,17 +66,23 @@ show_header() {
 }
 
 show_logo() {
-  cat << 'LOGO'
+  local logo_file="${ROOT}/assets/logo.txt"
+  if [[ -f "$logo_file" ]]; then
+    cat "$logo_file"
+    echo
+    return
+  fi
 
+  cat << 'LOGO'
   ███╗   ██╗██╗██╗  ██╗ ██████╗ ██████╗  ██████╗██╗███████╗████████╗
   ████╗  ██║██║╚██╗██╔╝██╔═══██╗██╔══██╗██╔════╝██║██╔════╝╚══██╔══╝
-  ██╔██╗ ██║██║ ╚███╔╝ ██║   ██║██████╔╝██║     ██║███████╗   ██║   
-  ██║╚██╗██║██║ ██╔██╗ ██║   ██║██╔══██╗██║     ██║╚════██║   ██║   
-  ██║ ╚████║██║██╔╝ ██╗╚██████╔╝██║  ██║╚██████╗██║███████║   ██║   
-  ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝╚══════╝   ╚═╝   
+  ██╔██╗ ██║██║ ╚███╔╝ ██║   ██║██████╔╝██║     ██║███████╗   ██║
+  ██║╚██╗██║██║ ██╔██╗ ██║   ██║██╔══██╗██║     ██║╚════██║   ██║
+  ██║ ╚████║██║██╔╝ ██╗╚██████╔╝██║  ██║╚██████╗██║███████║   ██║
+  ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝╚══════╝   ╚═╝
       The Declarative NixOS Package Sorcerer
-
 LOGO
+  echo
 }
 
 show_divider() {
@@ -223,34 +229,33 @@ _ui_refresh_slider() {
   _ui_colorize "$color" "$bar"
 }
 
-_ui_refresh_block_bar() {
-  local pct="$1"
-  local width=20
-  local filled=0
-  local empty=0
-  local fill=""
-  local gap=""
+_ui_refresh_urgency_percent() {
+  local remaining_pct="$1"
+  local urgency=0
 
-  if ! [[ "$pct" =~ ^-?[0-9]+$ ]]; then
-    pct=0
+  if ! [[ "$remaining_pct" =~ ^-?[0-9]+$ ]]; then
+    printf '0\n'
+    return
   fi
 
-  (( pct < 0 )) && pct=0
-  (( pct > 100 )) && pct=100
-  filled=$(( pct * width / 100 ))
-  empty=$(( width - filled ))
-  printf -v fill '%*s' "$filled" ''
-  printf -v gap '%*s' "$empty" ''
-  fill="${fill// /█}"
-  gap="${gap// /░}"
-  printf '[%s%s] %d%%' "$fill" "$gap" "$pct"
+  if (( remaining_pct < 0 )); then
+    printf '0\n'
+    return
+  fi
+
+  (( remaining_pct > 100 )) && remaining_pct=100
+  urgency=$(( 100 - remaining_pct ))
+  (( urgency < 0 )) && urgency=0
+  (( urgency > 100 )) && urgency=100
+  printf '%s\n' "$urgency"
 }
 
 show_refresh_countdown_bar() {
   local last_fetch="never"
   local left=-1
   local overdue=0
-  local pct=0
+  local remaining_pct=0
+  local urgency_pct=0
   local bar=""
   local eta_text="unknown until first fetch"
 
@@ -258,13 +263,11 @@ show_refresh_countdown_bar() {
     last_fetch="$(index_last_fetch_text)"
     left="$(index_refresh_seconds_left)"
     overdue="$(index_refresh_overdue_seconds)"
-    pct="$(index_refresh_remaining_percent)"
+    remaining_pct="$(index_refresh_remaining_percent)"
   fi
 
-  if ! [[ "$pct" =~ ^-?[0-9]+$ ]]; then
-    pct=0
-  fi
-  (( pct < 0 )) && pct=0
+  urgency_pct="$(_ui_refresh_urgency_percent "$remaining_pct")"
+  bar="$(_ui_refresh_slider "$urgency_pct")"
 
   if [[ "$left" =~ ^[0-9]+$ ]]; then
     eta_text="$(_ui_format_duration "$left") left"
@@ -273,8 +276,7 @@ show_refresh_countdown_bar() {
     eta_text="overdue by $(_ui_format_duration "$overdue")"
   fi
 
-  bar="$(_ui_refresh_block_bar "$pct")"
-  printf '  Refresh Countdown: %s\n' "$bar"
+  printf '  Refresh Countdown: %b %s%%\n' "$bar" "$urgency_pct"
   printf '  Next recommended fetch: %s\n' "$eta_text"
   printf '  Last fetch: %s\n' "$last_fetch"
   echo
@@ -287,6 +289,7 @@ show_refresh_health_panel() {
   local left=-1
   local overdue=0
   local pct=-1
+  local urgency_pct=0
   local slider=""
 
   if declare -F index_last_fetch_text >/dev/null 2>&1; then
@@ -301,18 +304,14 @@ show_refresh_health_panel() {
   printf '  Index Refresh Health:\n'
   show_status_line 'Last index refresh' "$last_fetch"
   show_status_line 'Last nixorcist all' "$last_all"
-  slider="$(_ui_refresh_slider "$pct")"
+  urgency_pct="$(_ui_refresh_urgency_percent "$pct")"
+  slider="$(_ui_refresh_slider "$urgency_pct")"
   printf '  %-35s %b\n' 'Refresh window' "$slider"
 
   if (( left >= 0 )); then
     show_status_line 'Recommended cadence' 'Refresh once every 7 days'
     if (( overdue > 0 )); then
       show_status_line 'Past due by' "$(_ui_colorize red "$(_ui_format_duration "$overdue")")"
-      printf '\n%b\n' "$(_ui_colorize red '        .-.')"
-      printf '%b\n' "$(_ui_colorize red '       (o o)')"
-      printf '%b\n' "$(_ui_colorize red '       | O \\')"
-      printf '%b\n' "$(_ui_colorize red '        \\   \\')"
-      printf '%b\n' "$(_ui_colorize red '         `~~~`')"
       printf '  %b\n' "$(_ui_colorize red 'You are way past the refresh. Refresh it now or I will proceed to exorcism process.')"
     else
       show_status_line 'Time left' "$(_ui_format_duration "$left") left before refresh is recommended"

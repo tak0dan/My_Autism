@@ -939,6 +939,35 @@ show_transaction_header() {
   echo
 }
 
+prompt_index_fetch_depth() {
+  local depth_input=""
+  local fetch_depth="5"
+
+  while true; do
+    printf '  Enter fetch depth [1-5] (default 5, q to cancel): '
+    read -r depth_input || true
+    depth_input="${depth_input//[[:space:]]/}"
+    depth_input="${depth_input,,}"
+
+    if [[ -z "$depth_input" ]]; then
+      printf '%s\n' "5"
+      return 0
+    fi
+
+    if [[ "$depth_input" == "q" ]]; then
+      return 1
+    fi
+
+    if [[ "$depth_input" =~ ^[1-5]$ ]]; then
+      fetch_depth="$depth_input"
+      printf '%s\n' "$fetch_depth"
+      return 0
+    fi
+
+    show_error 'Invalid depth. Use 1, 2, 3, 4, or 5.'
+  done
+}
+
 transaction_menu_loop_tty() {
   local choice
   local selected item
@@ -956,7 +985,7 @@ transaction_menu_loop_tty() {
     show_menu_item '4' 'Manage remove queue'
     show_menu_item '5' 'Preview changes'
     show_menu_item '6' 'Install query       - stage query and apply lock changes'
-    show_menu_item '7' 'Fetch index         - fetch package tree (depth 5) and store cache'
+    show_menu_item '7' 'Fetch index         - choose depth (1-5) and store cache'
     show_menu_item '0' 'Cancel'
     echo
     show_input_prompt 'Select an option (0-7):'
@@ -1035,11 +1064,24 @@ transaction_menu_loop_tty() {
         fi
         ;;
       7)
+        local selected_depth=""
+
         clear
         show_logo
         show_refresh_countdown_bar
-        show_section_header 'Fetching Package Index (depth 5)'
-        if build_nix_index 5; then
+        show_section_header 'Fetch Package Index'
+        selected_depth="$(prompt_index_fetch_depth || true)"
+        if [[ -z "$selected_depth" ]]; then
+          show_warning 'Fetch cancelled'
+          wait_for_key
+          continue
+        fi
+
+        clear
+        show_logo
+        show_refresh_countdown_bar
+        show_section_header "Fetching Package Index (depth ${selected_depth})"
+        if build_nix_index "$selected_depth"; then
           show_success 'Package index fetched and cached'
         else
           local fetch_rc=$?
@@ -1538,7 +1580,10 @@ install_from_args() {
   fi
 
   local token
-  ensure_index 1
+  if ! ensure_index 1; then
+    show_warning 'Install cancelled: package index is required but fetch was declined.'
+    return 1
+  fi
   transaction_init
 
   for token in "$@"; do

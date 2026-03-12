@@ -946,6 +946,7 @@ transaction_menu_loop_tty() {
   while true; do
     clear
     show_logo
+    show_refresh_countdown_bar
     show_transaction_header
     show_status_line "Use numbers and Enter to navigate."
     echo
@@ -955,7 +956,7 @@ transaction_menu_loop_tty() {
     show_menu_item '4' 'Manage remove queue'
     show_menu_item '5' 'Preview changes'
     show_menu_item '6' 'Install query       - stage query and apply lock changes'
-    show_menu_item '7' 'Refresh index       - rebuild fetched package cache'
+    show_menu_item '7' 'Fetch index         - fetch package tree (depth 5) and store cache'
     show_menu_item '0' 'Cancel'
     echo
     show_input_prompt 'Select an option (0-7):'
@@ -1036,9 +1037,10 @@ transaction_menu_loop_tty() {
       7)
         clear
         show_logo
-        show_section_header 'Refreshing Package Index'
+        show_refresh_countdown_bar
+        show_section_header 'Fetching Package Index (depth 5)'
         build_nix_index
-        show_success 'Package index refreshed'
+        show_success 'Package index fetched and cached'
         wait_for_key
         ;;
       0)

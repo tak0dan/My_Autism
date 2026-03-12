@@ -448,7 +448,45 @@ _index_source_b() {
 
 _index_source_c() {
   local out_file="$1"
-  : > "$out_file"
+  local -a nix_args=()
+
+  if declare -F _init_nix_pkg_args >/dev/null 2>&1; then
+    _init_nix_pkg_args
+    nix_args=("${_nix_pkg_args[@]}")
+  fi
+
+  nix eval --impure "${nix_args[@]}" --raw --expr '
+    let
+      pkgs = import <nixpkgs> {};
+      maxDepth = 5;
+
+      concatMap = f: xs: builtins.concatLists (map f xs);
+
+      describe = v:
+        if builtins.isAttrs v && v ? meta && builtins.isAttrs v.meta && v.meta ? description && builtins.isString v.meta.description
+        then v.meta.description
+        else "";
+
+      walk = depth: prefix: attrs:
+        if depth >= maxDepth || !(builtins.isAttrs attrs) then
+          []
+        else
+          let
+            names = builtins.attrNames attrs;
+            step = name:
+              let
+                path = if prefix == "" then name else prefix + "." + name;
+                valueTry = builtins.tryEval attrs.${name};
+                value = if valueTry.success then valueTry.value else null;
+                line = path + "|" + (if valueTry.success then describe value else "");
+                nested = if valueTry.success && builtins.isAttrs value then walk (depth + 1) path value else [];
+              in
+                [line] ++ nested;
+          in
+            concatMap step names;
+    in
+      builtins.concatStringsSep "\n" (walk 0 "" pkgs)
+  ' > "$out_file" 2>/dev/null || : > "$out_file"
 }
 
 build_nix_index() {
@@ -483,7 +521,7 @@ build_nix_index() {
   _index_run_stage 30 55 "Source B (top-level attrs)" "$exp_b" _index_source_b "$tmp_b" || true
   observed_b="$_INDEX_LAST_STAGE_SECS"
 
-  _index_run_stage 55 80 "Source C (recursive flake scan)" "$exp_c" _index_source_c "$tmp_c" || true
+  _index_run_stage 55 80 "Source C (recursive attr fetch depth 5)" "$exp_c" _index_source_c "$tmp_c" || true
   observed_c="$_INDEX_LAST_STAGE_SECS"
 
   local lines_a=0

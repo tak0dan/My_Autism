@@ -223,6 +223,63 @@ _ui_refresh_slider() {
   _ui_colorize "$color" "$bar"
 }
 
+_ui_refresh_block_bar() {
+  local pct="$1"
+  local width=20
+  local filled=0
+  local empty=0
+  local fill=""
+  local gap=""
+
+  if ! [[ "$pct" =~ ^-?[0-9]+$ ]]; then
+    pct=0
+  fi
+
+  (( pct < 0 )) && pct=0
+  (( pct > 100 )) && pct=100
+  filled=$(( pct * width / 100 ))
+  empty=$(( width - filled ))
+  printf -v fill '%*s' "$filled" ''
+  printf -v gap '%*s' "$empty" ''
+  fill="${fill// /█}"
+  gap="${gap// /░}"
+  printf '[%s%s] %d%%' "$fill" "$gap" "$pct"
+}
+
+show_refresh_countdown_bar() {
+  local last_fetch="never"
+  local left=-1
+  local overdue=0
+  local pct=0
+  local bar=""
+  local eta_text="unknown until first fetch"
+
+  if declare -F index_last_fetch_text >/dev/null 2>&1; then
+    last_fetch="$(index_last_fetch_text)"
+    left="$(index_refresh_seconds_left)"
+    overdue="$(index_refresh_overdue_seconds)"
+    pct="$(index_refresh_remaining_percent)"
+  fi
+
+  if ! [[ "$pct" =~ ^-?[0-9]+$ ]]; then
+    pct=0
+  fi
+  (( pct < 0 )) && pct=0
+
+  if [[ "$left" =~ ^[0-9]+$ ]]; then
+    eta_text="$(_ui_format_duration "$left") left"
+  fi
+  if [[ "$overdue" =~ ^[0-9]+$ ]] && (( overdue > 0 )); then
+    eta_text="overdue by $(_ui_format_duration "$overdue")"
+  fi
+
+  bar="$(_ui_refresh_block_bar "$pct")"
+  printf '  Refresh Countdown: %s\n' "$bar"
+  printf '  Next recommended fetch: %s\n' "$eta_text"
+  printf '  Last fetch: %s\n' "$last_fetch"
+  echo
+}
+
 show_refresh_health_panel() {
   local last_fetch="never"
   local last_all="never"

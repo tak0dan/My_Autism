@@ -29,7 +29,10 @@ lib/lock.sh
 │   └── transaction_menu_loop()            # Main transaction UI
 │
 ├── Import & Resolution
-│   ├── import_from_file(file)             # Import packages from file
+│   ├── import_from_file(file, route)      # Import packages from file
+│   ├── install_from_args(args...)         # Temp-file wrapper for arg install
+│   ├── delete_from_args(args...)          # Temp-file wrapper for arg delete
+│   ├── chant_from_args(args...)           # Temp-file wrapper for mixed +/- args
 │   ├── handle_missing_package(missing)    # Interactive fuzzy resolution
 │   └── run_transaction_cli()              # Entry point
 │
@@ -106,12 +109,40 @@ run_transaction_cli
 # Returns 0 on success, 1 on cancel
 ```
 
-### import_from_file(file)
-Import packages from a text file with optional review.
+### import_from_file(file, route)
+Import packages from a text file with optional review, or auto-apply when called by wrappers.
 ```bash
-import_from_file "packages.txt"
+import_from_file "packages.txt" "chant"
 # File can be comma-separated, newline-separated, or space-separated
 ```
+
+Mode switching is supported directly in import tokens:
+- default token mode is install (`add`)
+- `+` switches parser mode to install
+- `-` switches parser mode to delete
+- switches can be inline and repeated (`+f+g -vim +helix`)
+
+Example:
+```bash
+echo "a b,c,d -e f,+a +f+g h + l - l" > chant.txt
+import_from_file "chant.txt" "chant"
+```
+
+Result:
+- staged add: `a b c d a f g h l`
+- staged remove: `e f l`
+- apply order keeps natural delete priority (remove after add)
+
+### install_from_args(args...)
+Creates a temporary file from CLI args and routes to `import_from_file` in auto mode.
+
+### delete_from_args(args...)
+Creates a temporary file prefixed with `-` and routes to `import_from_file` in auto mode.
+Also removes matching generated module files and regenerates hub.
+
+### chant_from_args(args...)
+Creates a temporary file from raw CLI args and routes to `import_from_file` in auto mode.
+Supports mixed `+/-` transitions in one command.
 
 ## Code of Conduct
 

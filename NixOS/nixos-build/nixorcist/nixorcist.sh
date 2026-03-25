@@ -3,6 +3,17 @@ set -euo pipefail
 
 ROOT="/etc/nixos/nixorcist"
 export ROOT
+export NIXORCIST_DESC_CACHE_DIR="/tmp/nixorcist-desc-cache-$$"
+mkdir -p "$NIXORCIST_DESC_CACHE_DIR" 2>/dev/null || true
+
+# Full terminal I/O listener
+source "$ROOT/listener.sh"
+# Listener is only useful for interactive TTY sessions.
+# In non-interactive command mode (ssh with stdin redirected, scripts, CI),
+# forcing the listener can terminate command flows early.
+if [[ -t 0 && -t 1 ]]; then
+  start_nixorcist_listener "$@"
+fi
 
 # Load directories first
 source "$ROOT/lib/dirs.sh"
@@ -12,12 +23,17 @@ prepare_dirs
 source "$ROOT/lib/cli.sh"
 
 # Load all libraries
-for lib in utils lock gen hub rebuild index; do
+for lib in utils lock gen hub rebuild index merge; do
   source "$ROOT/lib/$lib.sh"
 done
 
+nixorcist_trace_init
+enable_nixorcist_trace
+trap 'status=$?; nixorcist_trace "EXIT" "main status=$status"' EXIT
+
 main() {
   local command="${1:-help}"
+  nixorcist_trace "ARGS" "argv=$*"
 
   case "$command" in
     transaction)
@@ -45,6 +61,11 @@ main() {
       show_header "Purging Modules"
       purge_all_modules
       ;;
+    refresh-index|refresh|index)
+      show_header "Refreshing Package Index"
+      build_nix_index
+      show_success "Package index refreshed"
+      ;;
     import)
       if [[ -z "${2:-}" ]]; then
         show_error "import requires a file path"
@@ -54,13 +75,61 @@ main() {
       show_header "Importing from $2"
       import_from_file "$2"
       ;;
+    install|add|download)
+      if [[ $# -lt 2 ]]; then
+        show_error "install requires package arguments"
+        echo "Usage: nixorcist install <pkg ...>"
+        return 1
+      fi
+      show_header "Install from arguments"
+      shift
+      install_from_args "$@"
+      ;;
+    delete|selecte|uninstall|remove)
+      if [[ $# -lt 2 ]]; then
+        show_error "delete requires package arguments"
+        echo "Usage: nixorcist delete <pkg ...>"
+        return 1
+      fi
+      show_header "Delete from arguments"
+      shift
+      delete_from_args "$@"
+      ;;
+    chant|cast)
+      if [[ $# -lt 2 ]]; then
+        show_error "chant requires package arguments"
+        echo "Usage: nixorcist chant <tokens ...>"
+        return 1
+      fi
+      show_header "Chant: mixed install/delete"
+      shift
+      chant_from_args "$@"
+      ;;
     all)
+      local refresh_first=0
+      if [[ "${2:-}" == "--refresh-index" || "${2:-}" == "--refresh" ]]; then
+        refresh_first=1
+      fi
+
       show_header "Full Pipeline: select → gen → hub → rebuild"
+      index_mark_all_executed
+      if [[ "$refresh_first" -eq 1 ]]; then
+        build_nix_index
+      fi
       run_transaction_cli && \
       generate_modules && \
       regenerate_hub && \
       run_rebuild && \
       show_success "Full pipeline completed"
+      ;;
+    merge)
+      if [[ -z "${2:-}" ]]; then
+        show_error "merge requires a name argument"
+        echo "  Usage: nixorcist merge <name>"
+        return 1
+      fi
+      show_header "Merging All Packages"
+      merge_packages "$2"
       ;;
     help|-h|--help)
       show_logo

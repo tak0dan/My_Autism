@@ -2,10 +2,10 @@
 { config, pkgs, ... }:
 
 {
-  users.users.tak_1 = {
+  users.users.nixos = {
     isNormalUser = true;
     shell = pkgs.zsh;
-    description = "Elder Evil";
+    description = "Default Name";
     extraGroups = [ "networkmanager" "wheel" ];
     packages = with pkgs; [
       kdePackages.kate

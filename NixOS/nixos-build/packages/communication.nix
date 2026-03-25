@@ -1,8 +1,11 @@
 { pkgs }:
+
 with pkgs; [
-  discord
-  telegram-desktop
-  firefox
-  librewolf
-  chromium
+
+  # =========================
+  # Messaging & Chat
+  # =========================
+  discord            # Voice, video and text chat (gaming-oriented)
+  telegram-desktop   # Telegram messaging client
+
 ]

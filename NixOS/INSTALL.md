@@ -2,250 +2,205 @@
 
 ## Quick Start
 
-Follow these steps to set up nixorcist on a fresh NixOS installation:
+Follow these steps to set up this NixOS configuration on a fresh install.
 
 ### Prerequisites
-- Fresh NixOS install with base system running
+
+- Fresh NixOS installation with a base system running
 - Internet connectivity
-- sudo/root access
+- `sudo` or root access
+- `git` available (comes with most NixOS installs)
 
-### Step-by-Step Installation
+---
 
-#### 1. Initial Rebuild (with system upgrade)
+## Step 1 — Initial System Upgrade
+
+Bring the system up to date before making changes:
+
 ```bash
 sudo nixos-rebuild switch --upgrade
 ```
 
-This ensures your system is up-to-date before adding new packages.
+---
 
-#### 2. Clone the WtfOS Repository
+## Step 2 — Clone the Repository
+
 ```bash
 cd ~
-git clone https://github.com/yourusername/WtfOS.git
+git clone https://github.com/tak0dan/WtfOS.git
 cd WtfOS
 ```
 
-#### 3. Copy Configuration to NixOS
+---
+
+## Step 3 — Copy Configuration to NixOS
+
 ```bash
-sudo cp -r NixOS/nixos-build /etc/nixos/nixorcist
+sudo cp -r NixOS/nixos-build/* /etc/nixos/
 ```
 
-This places the nixorcist tool and Hyprland configuration in the standard location.
+This places the modular configuration, modules, packages, and Nixorcist into `/etc/nixos/`.
 
-#### 4. Comment Out thunar Package References
+> **Backup first:** If you have an existing `/etc/nixos/configuration.nix`, back it up before copying.
 
-The setup requires disabling `pkgs.thunar` initially as it may have unresolved dependencies in your environment.
+---
 
-**File 1:** `/etc/nixos/nixorcist/generated/pkg-dump.nix`
+## Step 4 — Adjust Your hardware-configuration.nix
+
+The `hardware-configuration.nix` in this repo is machine-specific. Replace it with your own:
+
 ```bash
-sudo sed -i 's/^  pkgs\.thunar/#  pkgs.thunar/g' /etc/nixos/nixorcist/generated/pkg-dump.nix
+sudo cp /etc/nixos/hardware-configuration.nix /etc/nixos/hardware-configuration.nix.bak
+# Re-generate if needed:
+sudo nixos-generate-config --show-hardware-config > /etc/nixos/hardware-configuration.nix
 ```
 
-**File 2:** `/etc/nixos/nixorcist/generated/hyprland.nix`
-```bash
-sudo sed -i 's/^  pkgs\.thunar/#  pkgs.thunar/g' /etc/nixos/nixorcist/generated/hyprland.nix
+---
+
+## Step 5 — Customize Configuration
+
+Edit `/etc/nixos/configuration.nix` and adjust:
+
+1. **Feature flags** — enable/disable Hyprland, Steam, virtualisation, etc.
+2. **`modules/users.nix`** — set your username and description
+3. **`modules/networking.nix`** — set your hostname
+4. **`modules/locale.nix`** — verify timezone and locale
+
+---
+
+## Step 6 — Enable Flakes
+
+Flakes must be enabled for Nixorcist's validation and some package options.
+
+In `/etc/nixos/configuration.nix`, verify this is present (it is by default):
+
+```nix
+nix.settings.experimental-features = [ "nix-command" "flakes" ];
 ```
 
-Or manually edit and add `#` before lines containing `pkgs.thunar`.
+---
 
-#### 5. Rebuild with Flakes Enabled
+## Step 7 — Bootstrap Nixorcist
+
+Before the first rebuild, generate the Nixorcist hub file so NixOS can evaluate the config:
+
 ```bash
-sudo nixos-rebuild switch --flakes
+sudo chmod +x /etc/nixos/nixorcist/nixorcist.sh
+sudo /etc/nixos/nixorcist/nixorcist.sh gen
+sudo /etc/nixos/nixorcist/nixorcist.sh hub
 ```
 
-The `--flakes` flag enables the new Nix flakes system, which is required for this configuration.
+---
 
-#### 6. Verify Installation
+## Step 8 — Rebuild
+
 ```bash
-# Check if nixorcist is accessible
-/etc/nixos/nixorcist/nixorcist.sh help
+sudo nixos-rebuild switch
+```
 
-# Or add to PATH for convenience
-export PATH="/etc/nixos/nixorcist:$PATH"
+This applies the full configuration. Expect it to take a while on the first run.
+
+---
+
+## Step 9 — Verify Installation
+
+```bash
+# Check nixorcist is reachable (added as a system package)
 nixorcist help
+
+# Check your desired features are active
+hyprctl version          # if hyprland = true
+systemctl status sddm    # display manager
 ```
 
 ---
 
 ## Automated Installation
 
-To automate all these steps, use the provided `install.sh` script:
+To automate the copy and bootstrap steps:
 
 ```bash
-cd WtfOS/NixOS
+cd ~/WtfOS/NixOS
 sudo bash install.sh
 ```
 
 The script will:
-1. ✓ Run `nixos-rebuild switch --upgrade`
-2. ✓ Copy configuration to `/etc/nixos/nixorcist`
-3. ✓ Comment out thunar references
-4. ✓ Run final rebuild with flakes
-5. ✓ Verify installation
+1. Run `nixos-rebuild switch --upgrade`
+2. Copy configuration to `/etc/nixos/`
+3. Bootstrap Nixorcist (`gen` + `hub`)
+4. Run final rebuild
 
----
-
-## Manual Step-by-Step (if not using script)
-
-### 1. Upgrade System
-```bash
-sudo nixos-rebuild switch --upgrade
-```
-
-### 2. Prepare NixOS Directory
-```bash
-sudo mkdir -p /etc/nixos
-cd ~/WtfOS
-```
-
-### 3. Copy Configuration
-```bash
-sudo cp -r NixOS/nixos-build /etc/nixos/nixorcist
-```
-
-### 4. Fix thunar References
-```bash
-# Disable thunar in pkg-dump.nix
-if sudo grep -q "pkgs\.thunar" /etc/nixos/nixorcist/generated/pkg-dump.nix; then
-  sudo sed -i 's/^[[:space:]]*pkgs\.thunar/#  pkgs.thunar/g' /etc/nixos/nixorcist/generated/pkg-dump.nix
-  echo "✓ Commented thunar in pkg-dump.nix"
-fi
-
-# Disable thunar in hyprland.nix
-if sudo grep -q "pkgs\.thunar" /etc/nixos/nixorcist/generated/hyprland.nix; then
-  sudo sed -i 's/^[[:space:]]*pkgs\.thunar/#  pkgs.thunar/g' /etc/nixos/nixorcist/generated/hyprland.nix
-  echo "✓ Commented thunar in hyprland.nix"
-fi
-```
-
-### 5. Create Configuration Hook
-If you don't have a `/etc/nixos/configuration.nix`, create one:
+To skip the system upgrade if already done:
 
 ```bash
-sudo mkdir -p /etc/nixos/generated
-sudo cat > /etc/nixos/configuration.nix << 'EOF'
-{ config, pkgs, ... }:
-{
-  imports = [
-    ./hardware-configuration.nix
-    ./nixorcist/generated/all-packages.nix
-  ];
-
-  system.stateVersion = "24.05";
-}
-EOF
-```
-
-### 6. Rebuild with Flakes
-```bash
-cd /etc/nixos
-sudo nixos-rebuild switch --flakes
+sudo bash install.sh --skip-upgrade
 ```
 
 ---
 
 ## Troubleshooting
 
-### Issue: "flakes is not a known option"
-**Solution:** Flakes are experimental; enable them in `/etc/nixos/configuration.nix`:
-```nix
-nix.settings.experimental-features = [ "nix-command" "flakes" ];
-```
-
-### Issue: "thunar: command not found"
-**Solution:** This is expected—we commented out thunar to avoid conflicts.
-
-### Issue: "package attribute missing"
-**Solution:** Run the automated install script to ensure all steps are followed correctly:
-```bash
-cd WtfOS/NixOS
-sudo bash install.sh --skip-upgrade  # Skip upgrade if already done
-```
-
-### Issue: "/etc/nixos/nixorcist not found"
-**Solution:** Ensure the copy step succeeded:
-```bash
-ls -la /etc/nixos/nixorcist/
-# Should show: nixorcist.sh, lib/, generated/, etc.
-```
+| Symptom | Fix |
+|---------|-----|
+| `all-packages.nix not found` | Run `sudo nixorcist gen && sudo nixorcist hub` |
+| `attribute 'X' missing` during rebuild | Run `sudo nixorcist rebuild` — smart resolver will prompt |
+| `nix-command is not a known feature` | Add `nix.settings.experimental-features = [ "nix-command" "flakes" ]` |
+| `fzf: command not found` | Add `fzf` to `environment.systemPackages` and rebuild |
+| TUI appears garbled | Ensure terminal supports UTF-8 and ANSI escape codes |
+| Nixorcist cache is stale | Delete `nixorcist/cache/pkg-validation.cache` and re-run |
+| Package index missing | Run `sudo nixorcist refresh-index` |
 
 ---
 
 ## Post-Installation
 
-### Using nixorcist
-
-Once installed, manage packages declaratively:
+### Managing Packages with Nixorcist
 
 ```bash
-# Enter transaction menu
-nixorcist transaction
+# Open the interactive TUI
+sudo nixorcist
 
-# Generate modules from lock file
-nixorcist gen
-
-# Rebuild configuration
-nixorcist rebuild
-
-# Or do all at once
-nixorcist all
+# Or use CLI directly
+sudo nixorcist install firefox git helix
+sudo nixorcist delete vim
+sudo nixorcist chant -python +python3
+sudo nixorcist rebuild
 ```
 
-### Re-enabling thunar (Optional)
-
-After system stabilizes, you can re-enable thunar:
+### Disabling Packages Without Editing Files
 
 ```bash
-# Uncomment thunar
-sudo sed -i 's/^#[[:space:]]*pkgs\.thunar/  pkgs.thunar/g' /etc/nixos/nixorcist/generated/{pkg-dump,hyprland}.nix
-
-# Rebuild to apply
-sudo nixos-rebuild switch --flakes
+nixos-comment discord        # removes from all package lists
+nixos-uncomment discord      # re-enables it
+nixos-smart-rebuild          # applies the change
 ```
 
-### Adding the tool to PATH
+### Deploying Dotfiles
 
-For convenience, add to your shell profile:
+From the repo root:
 
 ```bash
-# In ~/.bashrc or ~/.zshrc
-export PATH="/etc/nixos/nixorcist:$PATH"
+./Deploy-All.sh
 ```
-
-Then source the file:
-```bash
-source ~/.bashrc  # or ~/.zshrc
-```
-
-Now you can use `nixorcist` directly from anywhere.
 
 ---
 
 ## System Requirements
 
-- **Memory:** 2GB minimum (4GB recommended for compilation)
-- **Disk Space:** 5GB free for initial build, 1GB for package cache
-- **CPU:** Any (slower CPUs need more time for compilation)
-- **Network:** Internet connection for package downloads
+| Component | Minimum |
+|-----------|---------|
+| RAM | 2 GB (4 GB recommended for compilation) |
+| Disk | 5 GB free for initial build |
+| NixOS version | 24.05 or later |
+| Bash | 4.4+ |
 
 ---
 
 ## Documentation
 
-For detailed information about nixorcist modules, see:
+For detailed information about specific components:
 
-- [README_cli.md](../nixos-build/nixorcist/README_cli.md) - CLI interface
-- [README_lock.md](../nixos-build/nixorcist/README_lock.md) - Package management
-- [README_gen.md](../nixos-build/nixorcist/README_gen.md) - Module generation
-- [README_hub.md](../nixos-build/nixorcist/README_hub.md) - Hub aggregation
-- [README_rebuild.md](../nixos-build/nixorcist/README_rebuild.md) - System rebuild
-
----
-
-## Support
-
-For issues or questions:
-1. Check the troubleshooting section above
-2. Review module-specific documentation
-3. Inspect log output from `nixos-rebuild`
-4. Verify file permissions: `ls -la /etc/nixos/nixorcist/`
+- [nixos-build/README.md](nixos-build/README.md) — directory structure and feature flags
+- [nixos-build/modules/README.md](nixos-build/modules/README.md) — system modules reference
+- [nixos-build/nixorcist/README.md](nixos-build/nixorcist/README.md) — Nixorcist overview
+- [nixos-build/nixorcist/INSTALL.md](nixos-build/nixorcist/INSTALL.md) — Nixorcist installation into any NixOS config

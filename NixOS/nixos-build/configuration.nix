@@ -43,7 +43,7 @@ let
     # NOTE: Virtualisation takes some time to build, so unless you need it - #
     # I recommend to disable it on first rebuild                             #
     #========================================================================#
-    virtualisation = true;  # Docker + VirtualBox support
+    virtualisation = false;  # Docker + VirtualBox support
 
     nixorcist = true;       # Custom package automation system
     openssh = true;         # Remote access via SSH

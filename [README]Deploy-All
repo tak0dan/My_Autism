@@ -1,52 +1,99 @@
 # Deploy-All.sh
 
-Main orchestration script for the deployment engine.
-
-It:
-
-1. Validates required dependencies
-2. Loads plugin definitions
-3. Executes deployment operations
-4. Handles archives, files and symlinks
+Marker-based dotfile deployment engine. Scans source directories for embedded
+deployment markers and installs files to their target locations using a
+plugin-driven dispatch system.
 
 ---
 
 ## How It Works
 
-Deployment behavior is defined via JSON plugins in:
+Files in `Configs/`, `Apps-Workarounds/`, `Files/`, and `Tests/` can embed
+deployment markers anywhere in their content:
 
-Deployment/Plugins/
+```bash
+#<--[~/.config/waybar|chmod=644|type=file]-->#
+```
 
-The script delegates execution based on plugin `name`.
+`Deploy-All.sh` scans every file in those directories, extracts all markers,
+and dispatches each one to the corresponding plugin.
 
-No magic.
-No dependency resolution.
-No rollback.
+**The marker line is stripped** from the file before it is installed.  
+Archives and deployable-archives are passed through unmodified.
 
-Just execution.
+---
+
+## Marker Format
+
+```
+#<--[TARGET_DIR|OPTION|OPTION]-->#
+```
+
+| Field | Description |
+|-------|-------------|
+| `TARGET_DIR` | Destination directory. `~` expands to `$HOME`. |
+| `chmod=NNN` | File permissions (default: `644`) |
+| `type=PLUGIN` | Plugin type (default fallback: plain `install`) |
+
+A single file can carry multiple markers and will be deployed to multiple
+targets in one pass.
+
+---
+
+## Plugin Types
+
+| Type | Behavior |
+|------|----------|
+| `file` | Copy with `install -m CHMOD` |
+| `symlink` | Create a forced symbolic link (`ln -sfn`) |
+| `archive` | Extract with `tar -xf` |
+| `deployable-archive` | Extract and recursively process unpacked contents |
+| `script-dep` | Run a dependency installer script before deploying |
+
+Plugin definitions live in `Deployment/Plugins/*.json`.  
+See [`Deployment/Plugins/README.md`](Deployment/Plugins/README.md) for full details.
+
+---
+
+## Usage
+
+```bash
+# From the repository root:
+./Deploy-All.sh
+```
+
+---
+
+## Scan Roots
+
+By default the engine scans:
+
+- `Configs/`
+- `Apps-Workarounds/`
+- `Files/`
+- `Tests/` (if it exists)
 
 ---
 
 ## Requirements
 
-- bash
-- tar
-- realpath
-- install (coreutils)
+- `bash`
+- `tar` (for archive types)
+- `realpath` (for symlink type)
+- `install` (coreutils)
+- `jq` (for plugin JSON parsing)
 
 ---
 
 ## Limitations
 
-- No dry run mode
-- No transactional rollback
-- Minimal validation
-- Trusts JSON definitions
+- No dry-run mode.
+- No transactional rollback — if a step fails, previously deployed files are not reverted.
+- Minimal input validation — trusts marker content and plugin JSON.
 
 ---
 
 ## Design Goal
 
 Simple and hackable over abstract and generic.
-
 If it becomes complicated, rewrite it.

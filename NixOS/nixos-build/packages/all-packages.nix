@@ -23,7 +23,6 @@ let
   wm      = import ./window-managers.nix { inherit pkgs; };
   simplex = import ./simplex-chat.nix    { inherit pkgs; };
   mess = import ./pkg-dump.nix           { inherit pkgs; };
-  zsh = import ./zsh.nix                 { inherit pkgs; };
 
   weather = [ (pkgs.callPackage ./waybar-weather.nix {}) ];
 
@@ -44,5 +43,4 @@ builtins.concatLists [
   simplex
   weather
   mess
-  zsh
 ]

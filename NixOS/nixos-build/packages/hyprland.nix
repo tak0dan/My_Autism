@@ -1,13 +1,14 @@
 { pkgs }:
 
 with pkgs; [
+
   bc
   hyprland
   jq
   grim
   nwg-displays
   slurp
-  pkgs.hyprland-qt-support
+  hyprland-qt-support
   wlogout
   htop
   bat
@@ -25,7 +26,6 @@ with pkgs; [
   wallust
   wl-clipboard
   hyprlock
-  rofi
   findutils
   imagemagick
   ffmpeg
@@ -33,7 +33,7 @@ with pkgs; [
   mpvpaper
   procps
   libnotify
-  pkgs.thunar
+  thunar
   alacritty
   kitty
   waybar
@@ -43,28 +43,9 @@ with pkgs; [
   wofi
   eww
 
-
-
-#  kdePackages.ksystemlog
-#  kdePackages.breeze
-#  kdePackages.breeze-gtk
-#  kdePackages.breeze-icons
-#  kdePackages.kdeplasma-addons
-#  kdePackages.plasma-workspace
-#  kdePackages.plasma-integration
-#  libsForQt5.qt5ct
-#  nwg-look
-#  qt6Packages.qt6ct
-#  kdePackages.konsole
-#  kdePackages.dolphin
-#  kdePackages.kio
-#  kdePackages.kio-admin
-#  kdePackages.kio-extras
-#  kdePackages.kservice
-#  kdePackages.breeze
-#  kdePackages.breeze-icons
-###############################################################
-# Enable them only if you need those packages on your hyprland#
-# or if you use KDE but have the KDE module excluded from hub.#
-###############################################################
+  # KDE / Qt bridge
+  hyprland-qt-support
+  kdePackages.xdg-desktop-portal-kde
+  qt6.qtwayland
+  libsForQt5.qtwayland
 ]

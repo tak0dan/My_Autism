@@ -1,164 +1,101 @@
-# README_CLI.sh
+# cli.sh — TUI Engine & Visual Output
 
-## Overview
-The CLI module provides visual interface components for nixorcist. It abstracts all user-facing output formatting, making the codebase more maintainable and enabling consistent UI across all commands.
-
-## Command Surface
-
-Current command routes in the main CLI include:
-
-- `import FILE` - file import with `+/-` mode switching
-- `install|add ARGS...` - argument wrapper routed through import with temporary file
-- `delete|uninstall|remove|selecte ARGS...` - delete wrapper routed through import with temporary file
-- `chant ARGS...` - mixed add/remove in one argument stream
-
-Parser behavior for `import` and wrappers:
-- default mode is install
-- `+` switches to install mode
-- `-` switches to remove mode
-- signs can be repeated and inline (`+f+g -vim +helix`)
-
-## Location
-`lib/cli.sh`
-
-## Functions
-
-### `show_logo()`
-Displays the ASCII art nixorcist banner.
-
-**Usage:**
-```bash
-show_logo
-```
-
-**Output:**
-Beautiful ASCII logo identifying the tool as "The declarative NixOS package sorcerer"
+Provides the full interactive TUI and all visual output primitives used by
+the rest of Nixorcist.
 
 ---
 
-### `show_menu()`
-Displays the command reference menu in a framed box format.
+## TUI Entry Point
 
-**Usage:**
 ```bash
-show_menu
+main_menu
 ```
 
-**Output:**
-Complete list of available commands with descriptions and examples
+Opens the arrow-key navigable root menu.  Called by `nixorcist tui` (the default
+when no arguments are given to `nixorcist`).
 
 ---
 
-### `show_divider()`
-Prints a horizontal divider line for visual separation.
+## TUI Primitives
 
-**Usage:**
-```bash
-show_divider
-```
+### _tui_read_key
 
----
+Reads a single keypress including multi-byte escape sequences.
 
-### `show_header(title)`
-Prints a section header with visual indicator.
+Returns one of: `up` `down` `enter` `esc` `space` or the literal character.
 
-**Parameters:**
-- `$1` - Title string
+### _tui_menu TITLE ITEMS_ARRAY
 
-**Usage:**
-```bash
-show_header "Transaction Builder"
-```
+Displays a scrollable, arrow-key navigable menu.  Returns the index of the
+selected item via stdout.
 
----
+- `↑` / `↓` — move cursor
+- `Enter` — select
+- `Esc` / `q` — return -1 (go back / cancel)
 
-### `show_section(title)`
-Prints a section start indicator for grouping.
+Separator items (empty string or `──…──`) are skipped during navigation.
 
-**Parameters:**
-- `$1` - Section title
+### _tui_checklist TITLE ITEMS_ARRAY STATES_ARRAY
 
-**Usage:**
-```bash
-show_section "Processing Packages"
-```
+Like `_tui_menu` but each item has a toggleable `[+]` / `[-]` / `[ ]` state.
+
+- `Space` — toggle current item
+- `Enter` — confirm selection and return
+
+Used by the review screen to let the user mark packages for install/remove.
+
+### _tui_status_bar TEXT
+
+Renders a one-line status bar at the bottom of the terminal.
 
 ---
 
-### `show_error(message)`
-Prints an error message with error icon to stderr.
+## Flow Handlers
 
-**Parameters:**
-- `$1` - Error message
+Each TUI menu option has a dedicated `_tui_flow_*` handler:
 
-**Usage:**
-```bash
-show_error "Failed to validate package"
-```
+| Handler | Description |
+|---------|-------------|
+| `_tui_flow_install` | fzf package picker → stage to TX_ADD |
+| `_tui_flow_remove` | fzf picker from current lock → stage to TX_REMOVE |
+| `_tui_flow_chant` | free-text input with +/- syntax |
+| `_tui_flow_import` | file path input → `import_from_file` |
+| `_tui_flow_review` | checklist of all staged changes → confirm → apply |
+| `_tui_flow_fetch_index` | depth picker → `build_nix_index` |
+| `_tui_flow_gen_only` | `generate_modules` without rebuild |
+| `_tui_flow_view_status` | show lock contents and TX state |
 
----
-
-### `show_success(message)`
-Prints a success message with checkmark icon.
-
-**Parameters:**
-- `$1` - Success message
-
-**Usage:**
-```bash
-show_success "Lock updated"
-```
+State (TX_ADD / TX_REMOVE) is preserved across all flows.  The user can visit
+Install, then Remove, then Chant, then go back and change Install — everything
+accumulates until **Review & Cast** is confirmed.
 
 ---
 
-### `show_info(message)`
-Prints an informational message with info icon.
+## Visual Output Primitives
 
-**Parameters:**
-- `$1` - Info message
-
-**Usage:**
 ```bash
-show_info "Processing 42 packages"
+show_logo                   # ASCII banner (assets/logo.txt or inline)
+show_header "Title"         # Box-drawn section header
+show_success "msg"          # ✓ green message
+show_error   "msg"          # ✗ red message
+show_warning "msg"          # ⚠ yellow message
+show_info    "msg"          # ℹ blue message
+show_item "icon" "msg"      # ○/✓/✗ item line
+show_menu                   # Print the CLI help/command list
 ```
+
+All output goes to stdout.  Colors use ANSI escape codes and are safe to
+redirect (codes are only emitted when stdout is a TTY).
 
 ---
 
-### `show_item(status, message)`
-Prints a list item with custom status indicator.
+## Tracing
 
-**Parameters:**
-- `$1` - Status symbol/icon
-- `$2` - Item description
+Nixorcist has a built-in debug tracer that appends to `nixorcist-trace.txt`.
 
-**Usage:**
 ```bash
-show_item "✓" "Generated: config.nix"
-show_item "-" "Staged: firefox"
-show_item "?" "Unresolved: package"
+nixorcist_trace "TAG" "message"
+enable_nixorcist_trace      # activates DEBUG trap
 ```
 
----
-
-## Code Style Guidelines
-
-- All output functions should indent with 2 spaces (`  `)
-- Use Unicode symbols for visual indicators (✓, ✗, ℹ, ○, etc.)
-- Messages should be concise and actionable
-- Error messages go to stderr; all others to stdout
-- Wrap long output in dividers for visual separation
-
-## Dependencies
-- None; pure bash
-
-## Example Integration
-```bash
-source "$ROOT/lib/cli.sh"
-
-show_header "Building System"
-show_info "Starting rebuild process"
-show_item "+" "Added: firefox"
-show_item "-" "Removed: chromium"
-show_divider
-show_success "Rebuild complete"
-```
+Set `NIXORCIST_TRACE_ENABLED=0` to disable.

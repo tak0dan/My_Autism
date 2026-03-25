@@ -5,6 +5,7 @@ with pkgs; [
   htop
   bat
   socat
+  sshpass
   p7zip
   bottom
   wine
@@ -23,7 +24,7 @@ with pkgs; [
   wallust
   steam
   vscode
-  vscodium
+  #vscodium
   netbeans
   nerd-fonts.symbols-only
   nerd-fonts.jetbrains-mono

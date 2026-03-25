@@ -289,9 +289,9 @@ in
     filterPkgs (import ./packages/all-packages.nix { inherit pkgs; })
     #==========================================================================================#
     # NOTE: Packages such as Telegram, Discord, Steam, MongoDB usually take some time to build #
-    # If you are not going to use them - DO NOT comment files anymore.                         #
-    # Instead use:                                                                             #
-    #     sudo nixos-comment <package>                                                          #
+    # If you are not going to use them - comment them manually in corresponding files.         #
+    # Or you can use:                                                                             #
+    #     sudo nixos-comment <package>                                                         #
     # which safely disables packages via disabled-packages.nix                                 #
     #==========================================================================================#
 

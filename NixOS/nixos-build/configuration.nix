@@ -177,6 +177,18 @@ let
     #     loading, but the NixOS module itself comes from nixowos/denix.
     #
     home-manager = true;
+
+    # =========================================================================
+    # 🤖 GITHUB COPILOT CLI
+    # =========================================================================
+    # Installs the GitHub Copilot CLI via the official installer script.
+    # Runs: curl -fsSL https://gh.io/copilot-install | bash
+    #
+    # ⚠️  Requires internet access on first activation.
+    #     Installation is guarded by a sentinel file and only runs once.
+    #     To re-install, remove: /var/lib/copilot-cli/.installed
+    #
+    copilot = true;
   };
 
 
@@ -356,6 +368,12 @@ in
   #
   services.pipewire.enable = true;
 
+ 
+  #===========================================================================
+  # KEYRINGS
+  #===========================================================================
+  services.gnome.gnome-keyring.enable = true;
+  
 
   # ===========================================================================
   # 🪟 WINDOW MANAGER
@@ -513,6 +531,34 @@ in
         exec /etc/nixos/scripts/nix-rebuild-smart.sh "$@"
       '')
     ];
+
+
+  # ===========================================================================
+  # 🤖 GITHUB COPILOT CLI
+  # ===========================================================================
+  # Activation script always runs so it can also clean up when disabled.
+  #
+  system.activationScripts.copilot-cli.text = ''
+    SENTINEL="/var/lib/copilot-cli/.installed"
+    BINARY="/usr/local/bin/copilot"
+
+    if [ "${lib.boolToString features.copilot}" = "true" ]; then
+      if [ ! -f "$SENTINEL" ]; then
+        echo "[*] Installing GitHub Copilot CLI..."
+        mkdir -p /var/lib/copilot-cli
+        ${pkgs.curl}/bin/curl -fsSL https://gh.io/copilot-install | ${pkgs.bash}/bin/bash
+        touch "$SENTINEL"
+        echo "[✓] GitHub Copilot CLI installed."
+      fi
+    else
+      if [ -f "$SENTINEL" ] || [ -f "$BINARY" ]; then
+        echo "[*] Removing GitHub Copilot CLI..."
+        rm -f "$BINARY"
+        rm -rf /var/lib/copilot-cli
+        echo "[✓] GitHub Copilot CLI removed."
+      fi
+    fi
+  '';
 
 
   # ===========================================================================

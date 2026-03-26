@@ -3,16 +3,26 @@
 # =============================================================================
 #                           🧠 CONFIG OVERVIEW
 # =============================================================================
-# This is a modular NixOS configuration driven by feature flags.
+# Modular NixOS configuration driven by feature flags and GPU profiles.
 #
-# 👉 New users:
-# - You ENABLE/DISABLE functionality using the `features` block below.
-# - Most logic is conditionally included via `lib.optionals` or `lib.mkIf`.
-# - If something breaks, check which feature introduced it.
+# ┌─ HOW TO USE ───────────────────────────────────────────────────────────┐
+# │  1. Set your options in the `features` block below.                    │
+# │  2. Run: nixos-smart-rebuild                                           │
+# │  3. If something breaks, check which feature flag controls it.         │
+# └────────────────────────────────────────────────────────────────────────┘
 #
-# ⚠️ Rule of thumb:
-# - If you don't understand a module → don't delete it, disable its feature.
-# - If you add a new feature → follow the same pattern used here.
+# ┌─ MODULE LOADING RULES ─────────────────────────────────────────────────┐
+# │  Always loaded:                                                        │
+# │    hardware, boot, display/login, core system, shell, gpu.nix          │
+# │                                                                        │
+# │  Loaded when features.hyprland = true:                                 │
+# │    window-managers, portals, quickshell, fonts, theme, overlays, nh    │
+# │    vm-guest-services (*), local-hardware-clock (*)                     │
+# │    (*) imported but inactive until their own option is set             │
+# │                                                                        │
+# │  GPU kernel params: always applied when gpu != "none"                  │
+# │  GPU kernel params + drivers: always applied when gpu != "none"        │
+# └────────────────────────────────────────────────────────────────────────┘
 #
 # =============================================================================
 
@@ -20,73 +30,174 @@
 # =============================================================================
 #                           🚀 FEATURE TOGGLES
 # =============================================================================
-# Toggle system-wide functionality here.
-# These flags control imports, packages, and services across the config.
-#
-# ✔ true  = enable feature
-# ❌ false = completely remove it from system
-#
-# NOTE:
-# This configuration uses separate package groups, so usually disabling one feature
-# will not break dependencies.
-# However some features can depend on others implicitly (e.g., KDE + Hyprland integration).
-# This config does NOT enforce dependencies automatically—you're responsible.
-#
 let
   features = {
-    hyprland = true;        # Wayland compositor (tiling WM)
-    kde = true;             # KDE runtime components (not full Plasma session)
-    steam = true;           # Gaming stack (Steam + GameMode)
-    uwu = true;             # Meme / aesthetic / optional nonsense
 
-    #========================================================================#
-    # NOTE: Virtualisation takes some time to build, so unless you need it - #
-    # I recommend to disable it on first rebuild                             #
-    #========================================================================#
-    virtualisation = true;  # Docker + VirtualBox support
+    # =========================================================================
+    # 🪟 HYPRLAND
+    # =========================================================================
+    # Wayland compositor (tiling window manager).
+    #
+    # Turning this ON also loads:
+    #   modules/window-managers.nix   — Hyprland + bspwm/i3 fallback
+    #   modules/portals.nix           — XDG desktop portals (screen share, etc.)
+    #   modules/quickshell.nix        — Wayland shell widget system
+    #   modules/fonts.nix             — Large font collection for bars/terminals
+    #   modules/theme.nix             — GTK/cursor/dconf dark theme
+    #   modules/overlays.nix          — nixpkgs patches (waybar-weather, etc.)
+    #   modules/nh.nix                — Nix helper + nix-output-monitor
+    #   modules/vm-guest-services.nix — (inactive unless vm.guest-services.enable)
+    #   modules/local-hardware-clock.nix — (inactive unless local.hardware-clock.enable)
+    #   packages/hyprland.nix         — Hyprland-specific user packages
+    #
+    hyprland = true;
 
-    nixorcist = true;       # Custom package automation system
-    openssh = true;         # Remote access via SSH
+    # =========================================================================
+    # 🖥️  HARDWARE PROFILES
+    # =========================================================================
+    #==========================================================================
+    #==========================================================================
+    # 🖥️  KERNEL PARAMS PROFILE  (mandatory — "generic" is safe for any hardware)
+    # =========================================================================
+    # Selects boot-time kernel tuning. No dependency on any software feature.
+    # Owns: boot.kernelParams, boot.kernelModules, boot.initrd.*, hardware.cpu.*,
+    #       hardware.enableRedistributableFirmware, power management services.
+    #
+    # "generic"   Sane defaults for any hardware
+    #               → sysrq, panic auto-reboot, swappiness, firmware
+    # "thinkpad"  ThinkPad T480
+    #               → i915 GuC/HuC firmware, framebuffer compression,
+    #                 Intel microcode, power-profiles-daemon, sysctl tuning
+    # "nvidia"    Generic discrete Nvidia
+    #               → nvidia modules in initrd, DRM modesetting,
+    #                 cold-boot PCI rebind fix
+    #             Pair with:  driver = "nvidia"  or  driver = "nvidia-prime"
+    # "amd"       AMD system
+    #               → amd_iommu, ppfeaturemask, AMD microcode, early amdgpu load
+    #             Pair with:  driver = "amd"
+    #
+    kernelParams = "thinkpad";
 
-    #=====================================================================#
-    # NOTE: Home manager will need its own configuration                  #
-    # it's being used for automatic declarative management of your /home/ #
-    #=====================================================================#
+    # =========================================================================
+    # 🎮 GPU DRIVER PROFILE  (optional — "none" loads no driver module)
+    # =========================================================================
+    # Selects the GPU driver. No dependency on any software feature.
+    # Owns: services.xserver.videoDrivers, hardware.nvidia.*, hardware.graphics
+    #       extraPackages (VA-API, VDPAU libs).
+    # Does NOT touch boot.* — that is kernelParams' responsibility.
+    #
+    # "none"         No GPU driver (VM, headless, or built-in Intel without extras)
+    # "amd"          AMD — amdgpu videoDriver + VA-API packages
+    #                Pair with:  kernelParams = "amd"
+    # "intel"        Intel integrated — intel-media-driver + VA-API
+    #                Pair with:  kernelParams = "generic"  or  "thinkpad"
+    # "nvidia"       Nvidia discrete — full hardware.nvidia config
+    #                Pair with:  kernelParams = "nvidia"
+    # "nvidia-prime" Nvidia + Intel PRIME hybrid offload
+    #                Pair with:  kernelParams = "nvidia"
+    #
+    gpu = "none";
+
+    # =========================================================================
+    # 🎨 KDE RUNTIME
+    # =========================================================================
+    # KDE libraries and Qt integration for apps — does NOT install Plasma.
+    #
+    # Enables:
+    #   - Qt platform theme (kde)
+    #   - polkit-kde-agent-1 (authentication popups, wired to hyprland-session)
+    #   - KIO admin integration
+    #   - QML import paths for Qt5 declarative apps
+    #   - packages/kde.nix user packages
+    #
+    # ⚠️  polkit-kde-agent is hardwired to hyprland-session.target.
+    #     If hyprland = false, polkit popups will not auto-start.
+    #
+    kde = true;
+
+    # =========================================================================
+    # 🎮 STEAM / GAMING
+    # =========================================================================
+    # Enables:
+    #   - Steam with Gamescope session
+    #   - GameMode (performance governor on game launch)
+    #   - packages/games.nix user packages
+    #
+    steam = true;
+
+    # =========================================================================
+    # 🐾 UWU  (meme / aesthetic stack)
+    # =========================================================================
+    # Enables modules/uwu/nixowos.nix (denix-based home-manager wrapper).
+    #
+    # ⚠️  When uwu = true, home-manager is provided by nixowos → denix.
+    #     The standalone <home-manager/nixos> channel module is NOT imported
+    #     to avoid duplicate option declaration errors.
+    #     Setting both uwu = true AND home-manager = true is safe — the
+    #     import guard below handles deduplication automatically.
+    #
+    uwu = true;
+
+    # =========================================================================
+    # 📦 VIRTUALISATION
+    # =========================================================================
+    # Enables Docker + imports modules/virtualbox.nix.
+    #
+    # ⚠️  VirtualBox kernel module takes significant time to build.
+    #     Disable on first rebuild if you don't need it immediately.
+    #
+    virtualisation = true;
+
+    # =========================================================================
+    # 🤖 NIXORCIST
+    # =========================================================================
+    # Custom package automation system (see /etc/nixos/nixorcist/).
+    # Exposes the `nixorcist` CLI and loads auto-generated package lists.
+    #
+    nixorcist = true;
+
+    # =========================================================================
+    # 🔐 OPENSSH
+    # =========================================================================
+    # Enables the SSH daemon for remote access.
+    #
+    # ⚠️  Password authentication is ON. Switch to key-based auth for
+    #     production or internet-exposed machines.
+    #
+    openssh = true;
+
+    # =========================================================================
+    # 🏠 HOME-MANAGER
+    # =========================================================================
+    # Declarative management of /home/ (dotfiles, user packages, services).
+    # Reads configuration from ~/.hm-local/home.nix (or default.nix).
+    # Falls back gracefully if the file does not exist.
+    #
+    # ⚠️  When uwu = true this flag is still respected for user config
+    #     loading, but the NixOS module itself comes from nixowos/denix.
+    #
     home-manager = true;
   };
 
 
   # ===========================================================================
-  # 🚫 DISABLED PACKAGES (GLOBAL FILTER)
+  # 🚫 DISABLED PACKAGES
   # ===========================================================================
-  # Any package listed here will be removed from ALL package lists.
+  # Packages listed here are filtered out from ALL package groups globally.
+  # Managed by the CLI tools below — prefer those over manual edits.
   #
-  # This is safer than commenting files and works declaratively.
+  #   nixos-comment   <pkg>   disable a package
+  #   nixos-uncomment <pkg>   re-enable a package
   #
-  # Example:
-  #   disabledPackages = [ "steam" "discord" ];
-  #
-  # ===========================================================================
-  # 🚫 DISABLED PACKAGES (EXTERNAL SOURCE OF TRUTH)
-  # ===========================================================================
-  # This file is user-editable and controlled by CLI tools:
-  #   nixos-comment <pkg>
-  #   nixos-uncomment <pkg>
-  #
-  # Location:
-  #   /etc/nixos/packages/disabled/disabled-packages.nix
-  #
-  # Example:
-  #   [ "steam" "discord" ]
+  # Source of truth: /etc/nixos/packages/disabled/disabled-packages.nix
+  # Format: [ "steam" "discord" "telegram-desktop" ]
   #
   disabledPackages =
     import ./packages/disabled/disabled-packages.nix;
 
-  # Helper function
   isEnabled = pkg:
     !(builtins.elem (lib.getName pkg) disabledPackages);
 
-  # Apply filtering to package lists
   filterPkgs = list:
     builtins.filter isEnabled list;
 
@@ -95,115 +206,128 @@ in
 {
 
   # ===========================================================================
-  # 📦 IMPORTS (MODULE SYSTEM ENTRY POINT)
+  # 📦 IMPORTS
   # ===========================================================================
-  # This is where the system is assembled.
+  # Modules are split into three groups:
   #
-  # Order matters ONLY when modules override each other.
-  # Keep things grouped logically.
+  #   1. Always loaded — hardware, boot, core system, gpu.nix
+  #   2. Conditionally loaded — driven by feature flags above
+  #   3. Never import the individual driver modules directly;
+  #      gpu.nix manages amd/intel/nvidia/nvidia-prime internally.
   #
-	imports =
-	 [
-	   # --- Core system ---
-	   ./hardware-configuration.nix
+  imports =
+   [
+     # --- Hardware ---
+     ./hardware-configuration.nix
 
-	   # --- Boot ---
-	   ./modules/bootloader.nix
-	   ./modules/grub-theme.nix
-	   ./modules/kernel-params.nix
+     # --- Boot ---
+     ./modules/bootloader.nix
+     ./modules/grub-theme.nix
 
-	   # --- Display/Login ---
-	   ./modules/sddm.nix
+     # --- GPU (always loaded; profile + driver activation via features above) ---
+     # gpu.nix pulls in: kernel-params.nix, kernel-params-nvidia.nix,
+     #                   amd-drivers.nix, intel-drivers.nix,
+     #                   nvidia-drivers.nix, nvidia-prime-drivers.nix
+     # Activation is controlled by gpu.kernelParams and gpu.driver below.
+     ./modules/gpu.nix
 
-	   # --- Core system behavior ---
-	   ./modules/locale.nix
-	   ./modules/networking.nix
-	   ./modules/users.nix
-	   ./modules/audio.nix
+     # --- Display / Login ---
+     ./modules/sddm.nix
 
-	   # --- Shell / environment ---
-	   ./modules/environment.nix
-	   ./modules/zsh.nix
-	   ./modules/rebuild-error-hook.nix
+     # --- Core system ---
+     ./modules/locale.nix
+     ./modules/networking.nix
+     ./modules/users.nix
+     ./modules/audio.nix
 
-	   # --- Compatibility ---
-	   ./modules/nix-ld.nix
+     # --- Shell / environment ---
+     ./modules/environment.nix
+     ./modules/zsh.nix
+     ./modules/rebuild-error-hook.nix
 
-	   # --- Auto-generated packages ---
-	   ./nixorcist/generated/all-packages.nix
+     # --- Compatibility ---
+     ./modules/nix-ld.nix
 
-	   # --- Driver modules (enable via drivers.<name>.enable = true) ---
-	   ./modules/amd-drivers.nix
-	   ./modules/intel-drivers.nix
-	   ./modules/nvidia-drivers.nix
-	   ./modules/nvidia-prime-drivers.nix
-	   ./modules/vm-guest-services.nix
-	   ./modules/local-hardware-clock.nix
+     # --- Auto-generated package lists (managed by nixorcist) ---
+     ./nixorcist/generated/all-packages.nix
+   ]
 
-	   # --- System configuration ---
-	   ./modules/fonts.nix
-	   ./modules/portals.nix
-	   ./modules/theme.nix
-	   ./modules/overlays.nix
-	   ./modules/nh.nix
-	   ./modules/quickshell.nix
-	 ]
+   # home-manager channel module.
+   # Skipped when uwu = true because nixowos/denix already provides it.
+   ++ lib.optionals (features.home-manager && !features.uwu) [
+     <home-manager/nixos>
+   ]
 
-	 # NOTE: When uwu/nixowos is enabled, home-manager NixOS module is already
-	 # provided by the nixowos → denix dependency. Importing it again from the
-	 # channel would cause a duplicate option declaration error.
-	 ++ lib.optionals (features.home-manager && !features.uwu) [
-	   <home-manager/nixos>
-	 ]
+   # Hyprland stack — everything that only makes sense on a Wayland compositor.
+   #
+   # vm-guest-services and local-hardware-clock are included here because they
+   # originate from the Hyprland config set. They are safe no-ops by default;
+   # activate them by setting:
+   #   vm.guest-services.enable      = true;
+   #   local.hardware-clock.enable   = true;
+   ++ lib.optionals features.hyprland [
+     # Compositor + Wayland plumbing
+     ./modules/window-managers.nix   # Hyprland, bspwm, i3, xkb layout
+     ./modules/portals.nix           # XDG portals: screen share, file picker
+     ./modules/quickshell.nix        # Wayland shell widget layer
 
-	 ++ lib.optionals features.hyprland [
-	   ./modules/window-managers.nix
-	 ]
+     # Visual environment
+     ./modules/fonts.nix             # Nerd fonts, CJK, icon fonts, etc.
+     ./modules/theme.nix             # GTK Adwaita-dark, cursors, dconf defaults
+     ./modules/overlays.nix          # nixpkgs patches (waybar-weather, cmake fixes)
 
-	 ++ lib.optionals features.uwu [
-	   ./modules/uwu/nixowos.nix
-	 ]
+     # Tooling
+     ./modules/nh.nix                # `nh` Nix helper + nix-output-monitor + nvd
 
-	 ++ lib.optionals features.virtualisation [
-	   ./modules/virtualbox.nix
-	 ];
-    #===============================
-    # HOME-MANAGER module
-    #===============================
-    home-manager.users.tak_1 =
-    let
-        local = /home/tak_1/.hm-local;
+     # Optional hardware support (inactive until their enable option is set)
+     ./modules/vm-guest-services.nix    # QEMU guest agent + SPICE
+     ./modules/local-hardware-clock.nix # RTC in local time (dual-boot Windows)
+   ]
 
-        source =
-        if builtins.pathExists local then local else null;
+   ++ lib.optionals features.uwu [
+     ./modules/uwu/nixowos.nix
+   ]
 
-        hmFile =
-        if source != null && builtins.pathExists (source + "/home.nix") then
-            source + "/home.nix"
-        else if source != null && builtins.pathExists (source + "/default.nix") then
-            source + "/default.nix"
-        else
-            null;
-    in
-    {
-        home.username = "tak_1";
-        home.homeDirectory = "/home/tak_1";
-        home.stateVersion = "25.11";
-        home.enableNixpkgsReleaseCheck = false;
+   ++ lib.optionals features.virtualisation [
+     ./modules/virtualbox.nix
+   ];
 
-        # SAFE: only import if file exists
-        imports = lib.optionals (hmFile != null) [ hmFile ];
-
-        # fallback so system NEVER breaks
-        home.packages = [ pkgs.git ];
-    };
-    
-    
 
   # ===========================================================================
-  # 🔤 FONTS
+  # 🏠 HOME-MANAGER USER CONFIG
   # ===========================================================================
-  # Provides patched fonts with icons (important for terminals, bars, etc.)
+  # Reads from ~/.hm-local/home.nix (or default.nix).
+  # Falls back to a minimal config (just git) so the system never breaks
+  # if the file is missing.
+  #
+  home-manager.users.tak_1 =
+  let
+    local = /home/tak_1/.hm-local;
+    source = if builtins.pathExists local then local else null;
+    hmFile =
+      if source != null && builtins.pathExists (source + "/home.nix") then
+        source + "/home.nix"
+      else if source != null && builtins.pathExists (source + "/default.nix") then
+        source + "/default.nix"
+      else
+        null;
+  in
+  {
+    home.username = "tak_1";
+    home.homeDirectory = "/home/tak_1";
+    home.stateVersion = "25.11";
+    home.enableNixpkgsReleaseCheck = false;
+    imports = lib.optionals (hmFile != null) [ hmFile ];
+    home.packages = [ pkgs.git ]; # fallback so system never fails
+  };
+
+
+  # ===========================================================================
+  # 🔤 FONTS (base set — always loaded)
+  # ===========================================================================
+  # This is the minimal always-present font set.
+  # The full Hyprland font collection lives in modules/fonts.nix
+  # and is only loaded when features.hyprland = true.
   #
   fonts = {
     fontDir.enable = true;
@@ -215,9 +339,10 @@ in
 
 
   # ===========================================================================
-  # 🖥️ HARDWARE
+  # 🖥️  HARDWARE GRAPHICS (base)
   # ===========================================================================
-  # Enables GPU acceleration and 32-bit compatibility (needed for Steam)
+  # Enables Mesa / VA-API acceleration and 32-bit libs (required for Steam).
+  # GPU-specific driver config lives in modules/gpu.nix and its sub-modules.
   #
   hardware.graphics.enable = true;
   hardware.graphics.enable32Bit = true;
@@ -226,7 +351,8 @@ in
   # ===========================================================================
   # 🔊 AUDIO
   # ===========================================================================
-  # PipeWire replaces PulseAudio + JACK
+  # PipeWire as the unified audio/video server (replaces PulseAudio + JACK).
+  # Full PipeWire config (ALSA/PulseAudio compat) is in modules/audio.nix.
   #
   services.pipewire.enable = true;
 
@@ -234,17 +360,23 @@ in
   # ===========================================================================
   # 🪟 WINDOW MANAGER
   # ===========================================================================
-  # Hyprland is only enabled if the feature is on
-  #
   programs.hyprland.enable = features.hyprland;
 
+  # Wire hardware profiles — both are purely hardware config, no software deps.
+  # See the features block above for the full list of values and what each loads.
+  gpu.kernelParams = features.kernelParams;
+  gpu.driver       = features.gpu;
+
 
   # ===========================================================================
-  # 🎨 KDE RUNTIME (NOT FULL KDE DESKTOP)
+  # 🎨 KDE RUNTIME (libraries only — no Plasma session)
   # ===========================================================================
-  # This provides KDE libraries + integration for apps.
+  # Provides Qt/KDE integration so KDE apps work well under Hyprland.
   #
-  # ⚠️ This does NOT install Plasma itself.
+  # Dependencies:
+  #   - polkit-kde-agent wires itself to hyprland-session.target.
+  #     If hyprland = false, authentication popups will not auto-start.
+  #   - QML import paths are needed by Qt5 declarative components.
   #
   qt = lib.mkIf features.kde {
     enable = true;
@@ -263,9 +395,8 @@ in
 
   systemd.user.services.polkit-kde-agent = lib.mkIf features.kde {
     description = "Polkit KDE Authentication Agent";
-    after = [ "hyprland-session.target" ];
+    after    = [ "hyprland-session.target" ];
     wantedBy = [ "hyprland-session.target" ];
-
     serviceConfig = {
       ExecStart =
         "${pkgs.kdePackages.polkit-kde-agent-1}/libexec/polkit-kde-authentication-agent-1";
@@ -279,13 +410,10 @@ in
 
 
   # ===========================================================================
-  # 🌐 NETWORKING (SSH)
+  # 🌐 SSH
   # ===========================================================================
-  # Enables remote access.
-  #
-  # ⚠️ SECURITY NOTE:
-  # - Password auth is enabled → convenient but less secure
-  # - Consider switching to SSH keys later
+  # ⚠️  Password auth is enabled — fine for LAN, risky on the internet.
+  #     Switch to key-based auth for exposed machines.
   #
   services.openssh = lib.mkIf features.openssh {
     enable = true;
@@ -299,30 +427,24 @@ in
   # ===========================================================================
   # 📦 VIRTUALISATION
   # ===========================================================================
-  # Docker is controlled by feature flag
-  #
   virtualisation.docker.enable = features.virtualisation;
 
 
   # ===========================================================================
   # 🎮 GAMING
   # ===========================================================================
-  # Steam + performance tweaks
-  #
   programs.steam = lib.mkIf features.steam {
     enable = true;
-    gamescopeSession.enable = true; # Better fullscreen handling
+    gamescopeSession.enable = true;
   };
 
   programs.gamemode.enable = features.steam;
 
 
   # ===========================================================================
-  # ⚙️ NIX SETTINGS
+  # ⚙️  NIX SETTINGS
   # ===========================================================================
-  # Global Nix behavior tweaks
-  #
-  nixpkgs.config.allowUnfree = true; # Needed for Steam, etc.
+  nixpkgs.config.allowUnfree = true;
 
   nix.settings = {
     experimental-features = [ "nix-command" "flakes" ];
@@ -334,26 +456,15 @@ in
   # ===========================================================================
   # 📦 SYSTEM PACKAGES
   # ===========================================================================
-  # This aggregates packages from multiple sources.
-  #
-  # Structure:
-  # 1. Global packages
-  # 2. Feature-specific packages
-  # 3. Forced always-installed tools
+  # Assembled from multiple package files based on active features.
+  # Use `nixos-comment <pkg>` to disable individual packages without editing files.
   #
   environment.systemPackages =
 
-    # --- Global packages ---
+    # Global packages (always installed regardless of features)
     filterPkgs (import ./packages/all-packages.nix { inherit pkgs; })
-    #==========================================================================================#
-    # NOTE: Packages such as Telegram, Discord, Steam, MongoDB usually take some time to build #
-    # If you are not going to use them - comment them manually in corresponding files.         #
-    # Or you can use:                                                                             #
-    #     sudo nixos-comment <package>                                                         #
-    # which safely disables packages via disabled-packages.nix                                 #
-    #==========================================================================================#
 
-    # --- Feature-based packages ---
+    # Feature-gated package groups
     ++ lib.optionals features.kde
       (filterPkgs (import ./packages/kde.nix { inherit pkgs; }))
 
@@ -363,33 +474,26 @@ in
     ++ lib.optionals features.steam
       (filterPkgs (import ./packages/games.nix { inherit pkgs; }))
 
-    # --- Always-installed utilities ---
+    # Always-installed system utilities
     ++ [
       pkgs.kdePackages.polkit-kde-agent-1
       pkgs.kdePackages.kio-admin
       pkgs.hyprland-qt-support
 
+      # nixorcist CLI wrapper
       (pkgs.writeShellScriptBin "nixorcist" ''
         exec /etc/nixos/nixorcist/nixorcist.sh "$@"
       '')
 
-      # ============================================================
-      # 🧠 NIXOS PACKAGE TOGGLE TOOLING
-      # ============================================================
-
+      # Package toggle tooling
+      # Usage: nixos-comment discord   → disables discord system-wide
+      #        nixos-uncomment discord → re-enables it
       (pkgs.writeShellScriptBin "nixos-comment" ''
         set -euo pipefail
         FILE="/etc/nixos/packages/disabled/disabled-packages.nix"
         PKG="$1"
-
-        if [[ -z "$PKG" ]]; then
-          echo "Usage: nixos-comment <package>"
-          exit 1
-        fi
-
-        grep -q "\"$PKG\"" "$FILE" && {
-          echo "[!] $PKG already disabled"; exit 0; }
-
+        if [[ -z "$PKG" ]]; then echo "Usage: nixos-comment <package>"; exit 1; fi
+        grep -q "\"$PKG\"" "$FILE" && { echo "[!] $PKG already disabled"; exit 0; }
         sed -i "/\[/a\  \"$PKG\"" "$FILE"
         echo "[✓] Disabled $PKG"
         echo "[*] Run: nixos-smart-rebuild"
@@ -399,12 +503,7 @@ in
         set -euo pipefail
         FILE="/etc/nixos/packages/disabled/disabled-packages.nix"
         PKG="$1"
-
-        if [[ -z "$PKG" ]]; then
-          echo "Usage: nixos-uncomment <package>"
-          exit 1
-        fi
-
+        if [[ -z "$PKG" ]]; then echo "Usage: nixos-uncomment <package>"; exit 1; fi
         sed -i "/\"$PKG\"/d" "$FILE"
         echo "[✓] Enabled $PKG"
         echo "[*] Run: nixos-smart-rebuild"
@@ -419,9 +518,8 @@ in
   # ===========================================================================
   # 🧾 STATE VERSION
   # ===========================================================================
-  # DO NOT CHANGE unless you know what you're doing.
-  #
-  # This locks behavior for backward compatibility.
+  # DO NOT CHANGE unless you are doing a NixOS release upgrade and know
+  # exactly what stateful things will be migrated.
   #
   system.stateVersion = "25.11";
 

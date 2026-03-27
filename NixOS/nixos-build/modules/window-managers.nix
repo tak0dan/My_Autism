@@ -1,6 +1,9 @@
-{ config, pkgs, ... }:
+{ config, pkgs, features, ... }:
 
 {
+  # Hyprland compositor toggle — activated via features.hyprland in configuration.nix
+  programs.hyprland.enable = features.hyprland;
+
   services.xserver.enable = true;
 
   services.desktopManager.plasma6.enable = true;

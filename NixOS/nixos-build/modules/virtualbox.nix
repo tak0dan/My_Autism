@@ -2,6 +2,12 @@
 
 {
   ############################
+  # Virtualisation — Docker
+  ############################
+  # Enabled together with VirtualBox via features.virtualisation in configuration.nix.
+  virtualisation.docker.enable = true;
+
+  ############################
   # Virtualisation — VirtualBox Host
   ############################
   virtualisation.virtualbox.host = {

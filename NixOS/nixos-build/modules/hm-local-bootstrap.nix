@@ -1,6 +1,6 @@
 # ==================================================
-#  KoolDots (2026)
-#  Project URL: https://github.com/LinuxBeginnings
+#  Tak_OS (2026)
+#  Project URL: https://github.com/tak0dan/Tak_OS
 #  License: GNU GPLv3
 #  SPDX-License-Identifier: GPL-3.0-or-later
 # ==================================================
@@ -41,16 +41,21 @@
         if [ ! -s "/home/${user}/.hm-local/home.nix" ]; then
           echo "[!] /home/${user}/.hm-local/home.nix is empty — recreating scaffold"
           _needs_scaffold=1
-        elif ! nix-instantiate --parse "/home/${user}/.hm-local/home.nix" \
+        else
+          _nix_inst=$(command -v nix-instantiate 2>/dev/null || echo /run/current-system/sw/bin/nix-instantiate)
+          if ! "$_nix_inst" --parse "/home/${user}/.hm-local/home.nix" \
                > /dev/null 2>&1; then
-          echo "[!] /home/${user}/.hm-local/home.nix has a syntax error — recreating scaffold"
-          _needs_scaffold=1
+            echo "[!] /home/${user}/.hm-local/home.nix has a syntax error — recreating scaffold"
+            _needs_scaffold=1
+          fi
         fi
       fi
 
       if [ "$_needs_scaffold" = "1" ]; then
-        cat > "/home/${user}/.hm-local/home.nix" << 'HMEOF'
+        _hm_tmp=$(mktemp "/home/${user}/.hm-local/.home.nix.XXXXXX")
+        cat > "$_hm_tmp" << 'HMEOF'
 ${builtins.readFile ./hm-home-scaffold.nix}HMEOF
+        mv -f "$_hm_tmp" "/home/${user}/.hm-local/home.nix"
         echo "[*] Wrote /home/${user}/.hm-local/home.nix (scaffold)"
       fi
 

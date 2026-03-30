@@ -1,3 +1,5 @@
+# Tak_OS · core.nix — Essential CLI tools and base utilities
+# github.com/tak0dan/Tak_OS · GNU GPLv3
 { pkgs }:
 
 with pkgs; [
@@ -76,7 +78,9 @@ with pkgs; [
   # System Information
   # =========================
   dmidecode   # Read DMI/SMBIOS tables (hardware info)
-  fastfetch   # Fast system info display (neofetch alternative)
+  # fastfetch — provided by modules/default-fastfetch.nix (uwu=false)
+  #             or modules/uwu/nixowos.nix (uwu=true); not listed here to
+  #             avoid binary collision between the two wrappers.
   hwinfo      # Detailed hardware information tool
   lm_sensors  # Read hardware temperature and fan sensors
   lshw        # List hardware components

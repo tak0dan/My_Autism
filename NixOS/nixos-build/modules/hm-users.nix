@@ -1,6 +1,6 @@
 # ==================================================
-#  KoolDots (2026)
-#  Project URL: https://github.com/LinuxBeginnings
+#  Tak_OS (2026)
+#  Project URL: https://github.com/tak0dan/Tak_OS
 #  License: GNU GPLv3
 #  SPDX-License-Identifier: GPL-3.0-or-later
 # ==================================================
@@ -15,7 +15,7 @@
 #
 # Each profile:
 #   • Sets home.username / home.homeDirectory from the name alone.
-#   • Sets home.stateVersion — do not redefine in home.nix.
+#   • Sets home.stateVersion to match system.stateVersion — safe to override in home.nix.
 #   • Imports /home/<user>/.hm-local/home.nix    (preferred)
 #          or /home/<user>/.hm-local/default.nix  (fallback)
 #   • Falls back to a baseline (just git) when neither file exists.
@@ -25,7 +25,7 @@
 # The scaffold for ~/.hm-local/home.nix lives in modules/hm-home-scaffold.nix
 # and is written automatically by modules/hm-local-bootstrap.nix.
 
-{ pkgs, lib, features, ... }:
+{ config, pkgs, lib, features, ... }:
 {
   home-manager.users = lib.genAttrs features.home-manager-users (user:
     let
@@ -38,7 +38,7 @@
     {
       home.username                  = user;
       home.homeDirectory             = "/home/${user}";
-      home.stateVersion              = "25.11";
+      home.stateVersion              = lib.mkDefault config.system.stateVersion;
       home.enableNixpkgsReleaseCheck = false;
       imports                        = lib.optionals (hmFile != null) [ hmFile ];
       home.packages                  = [ pkgs.git ]; # baseline — always present

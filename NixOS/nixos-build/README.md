@@ -1,313 +1,419 @@
+# Tak\_OS — Modular NixOS Configuration
 
-# [⚠️⚠️⚠️] DO NOT COPY AND PASTE IT BLINDLY, CREATE BACKUP FIRST[⚠️⚠️⚠️] 
+```
+ ████████╗ █████╗ ██╗  ██╗       ██████╗ ███████╗
+    ██╔══╝██╔══██╗██║ ██╔╝      ██╔═══██╗██╔════╝
+    ██║   ███████║█████╔╝       ██║   ██║███████╗
+    ██║   ██╔══██║██╔═██╗       ██║   ██║╚════██║
+    ██║   ██║  ██║██║  ██╗      ╚██████╔╝███████║
+    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝       ╚═════╝ ╚══════╝
+         Declarative. Modular. Yours.
+```
 
-# Got a backup already? Good :) 
- Allow me to introduce:
-
-
-
-
-# WtfOS — Modular NixOS Configuration
-
-This repository contains a **modular NixOS configuration** designed to be readable, maintainable, and easy to expand without turning `configuration.nix` into a giant unreadable mess.
-
-The system follows a **layered architecture**:
-
-1. **Core system modules** — hardware, services, users, networking  
-2. **Window manager / desktop modules** — Hyprland, KDE, etc.  
-3. **Package groups** — logically separated sets of software  
-4. **Automated package management (Nixorcist)**  
-5. **Safe rebuild utilities**
-
-The result is a configuration that can scale without becoming chaotic.
+> **Repository:** [https://github.com/tak0dan/Tak_OS](https://github.com/tak0dan/Tak_OS)  
+> **License:** GNU GPLv3
 
 ---
 
-# Documentation Index
+## Install
 
-Main and module documentation entry points:
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/tak0dan/Tak_OS/main/scripts/bootstrap.sh)
+```
 
-- [NixOS/nixos-build/modules/README.md](NixOS/nixos-build/modules/README.md) - Core system modules overview
-- [NixOS/nixos-build/nixorcist/README.md](NixOS/nixos-build/nixorcist/README.md) - Nixorcist main documentation
-
-Nixorcist technical documentation:
-
-- [NixOS/nixos-build/nixorcist/README_cli.md](NixOS/nixos-build/nixorcist/README_cli.md) - CLI interface
-- [NixOS/nixos-build/nixorcist/README_lock.md](NixOS/nixos-build/nixorcist/README_lock.md) - Lock and transaction engine
-- [NixOS/nixos-build/nixorcist/README_utils.md](NixOS/nixos-build/nixorcist/README_utils.md) - Utility and validation layer
-- [NixOS/nixos-build/nixorcist/README_gen.md](NixOS/nixos-build/nixorcist/README_gen.md) - Module generation pipeline
-- [NixOS/nixos-build/nixorcist/README_hub.md](NixOS/nixos-build/nixorcist/README_hub.md) - Hub regeneration flow
-- [NixOS/nixos-build/nixorcist/README_rebuild.md](NixOS/nixos-build/nixorcist/README_rebuild.md) - Rebuild and staging flow
-
-Reference-format variants:
-
-- [NixOS/nixos-build/nixorcist/README_CLI.md](NixOS/nixos-build/nixorcist/README_CLI.md)
-- [NixOS/nixos-build/nixorcist/README_LOCK.md](NixOS/nixos-build/nixorcist/README_LOCK.md)
-- [NixOS/nixos-build/nixorcist/README_UTILS.md](NixOS/nixos-build/nixorcist/README_UTILS.md)
-- [NixOS/nixos-build/nixorcist/README_GEN.md](NixOS/nixos-build/nixorcist/README_GEN.md)
-- [NixOS/nixos-build/nixorcist/README_HUB.md](NixOS/nixos-build/nixorcist/README_HUB.md)
-- [NixOS/nixos-build/nixorcist/README_REBUILD.md](NixOS/nixos-build/nixorcist/README_REBUILD.md)
+The bootstrap script will:
+- Skip cloning if `~/Tak_OS` already exists
+- Ask whether to include wallpapers (~200 MB) and clone with or without `assets/Wallpapers`
+- Run `scripts/install.sh` to apply the configuration
 
 ---
 
-# Design Philosophy
+## Table of Contents
 
-The configuration follows several principles.
-
-## 1. Modularity
-
-Each system component lives in its own module:
-
-- networking
-- audio
-- bootloader
-- users
-- window managers
-- shell configuration
-
-This prevents a monolithic `configuration.nix`.
+- [What is Tak\_OS](#what-is-tak_os)
+- [Install](#install)
+- [Directory Structure](#directory-structure)
+- [Configuration Architecture](#configuration-architecture)
+  - [The Three Layers](#the-three-layers)
+  - [Feature Flags](#feature-flags)
+  - [How Modules Interact](#how-modules-interact)
+  - [Package Filtering](#package-filtering)
+- [Quick Start](#quick-start)
+- [Everyday Usage](#everyday-usage)
+- [Code of Conduct](#code-of-conduct)
+- [Upgrade Guide](#upgrade-guide)
 
 ---
 
-## 2. Separation of System vs Packages
+## What is Tak\_OS
 
-The repository separates system configuration from software installation.
+**Tak_OS** is a modular, feature-driven NixOS configuration. Instead of a
+single monolithic `configuration.nix` that grows without bound, every system
+concern lives in its own focused module. `configuration.nix` itself is a lean
+**feature-flag manifest** — closer to a structured config file than a program.
 
-modules/   → system configuration packages/  → software groups
+Goals:
 
-System configuration defines **how the OS works**.
-
-Package modules define **what software gets installed**.
-
----
-
-## 3. Package Groups Instead of One Giant List
-
-Instead of writing something like:
-
-environment.systemPackages = with pkgs; [ git firefox neovim ripgrep ];
-
-Packages are split into modules such as:
-
-packages/core.nix packages/development.nix packages/games.nix packages/communication.nix packages/kde.nix packages/hyprland.nix
-
-This keeps each category logically grouped.
+- **Readable at a glance** — open `configuration.nix`, flip a flag, rebuild.
+- **Safely composable** — modules never implicitly depend on each other.
+- **Beginner-friendly** — the standard `environment.systemPackages` section is
+  right there in `configuration.nix`, same as a stock NixOS system.
+- **Gradually declarative** — the Nixorcist CLI layer lets you install packages
+  imperatively and promote them to config whenever you are ready.
 
 ---
 
-# Package Modules
+## Directory Structure
 
-Each file inside `/packages` is intended to be **independent**.
+```
+/etc/nixos/
+├── configuration.nix             ← 🧠 system entry point (feature flags + wiring)
+├── hardware-configuration.nix    ← ⚙️  machine-specific hardware (auto-generated)
+├── bluetooth.nix                 ← 📶 bluetooth service
+│
+├── modules/                      ← 🔩 NixOS system modules (one concern per file)
+│   └── uwu/                      ←    optional cosmetic sub-module (NixOwOS)
+│
+├── packages/                     ← 📦 package groups by category
+│   └── disabled/                 ←    packages kept for reference, not installed
+│
+├── nixorcist/                    ← 🧙 CLI-driven package orchestration layer
+│   └── generated/                ←    auto-generated (never edit by hand)
+│
+├── scripts/                      ← 🛠️  build & deployment helpers (plain Bash)
+└── assets/                       ← 🖼️  wallpapers and media
+```
 
-Because of this design, **some packages may appear in multiple modules**.
+Sub-directory documentation:
 
-This is intentional.
-
-Reasons:
-
-- modules can be enabled independently  
-- modules remain portable  
-- dependencies stay local to the module
-
-This avoids hidden dependencies between modules.
-
-Example scenario:
-
-hyprland module needs:
-
-wl-clipboard grim slurp
-
-These packages might also appear in:
-
-core module development module
-
-This duplication is **deliberate and harmless**.
+| Path | README |
+|------|--------|
+| [`modules/`](modules/README.md) | Module groups, interaction model, anatomy |
+| [`packages/`](packages/README.md) | Package groups, disabled list, filtering |
+| [`nixorcist/`](nixorcist/README.md) | CLI tool, generated layer, observability |
+| [`scripts/`](scripts/README.md) | Rebuild helpers, comment/uncomment, deploy |
+| [`assets/`](assets/README.md) | Wallpapers and media |
 
 ---
 
-# Hyprland Module
+## Configuration Architecture
 
-The Hyprland module is designed specifically to support the configuration from:
+### The Three Layers
 
-[https://github.com/LinuxBeginnings/Hyprland-Dots](https://github.com/LinuxBeginnings/Hyprland-Dots)
+Tak_OS separates concerns into three distinct ownership layers:
 
-However, this configuration **does not rely on the flake** provided by that project.
-Instead:
-
-- the configuration was reworked
-- converted into modular NixOS modules
-- integrated into this repository structure
-
-This avoids tight coupling to an external flake.
-
-So for the better experience I suggest to install it next way:
-
-It is not suggested to use the auto-installation script since it detects the distro and installs the dotfiles with flake.
-Instead do: 
 ```
-git clone --depth=1 https://github.com/LinuxBeginnings/Hyprland-Dots.git -b development
-cd Hyprland-Dots
+┌──────────────────────────────────────────────────────────┐
+│  1. CANONICAL LAYER  (your hands)                        │
+│     configuration.nix  +  modules/  +  packages/         │
+│     • Fully declarative                                  │
+│     • Manually controlled                                │
+│     • Persistent across all operations                   │
+├──────────────────────────────────────────────────────────┤
+│  2. GENERATED LAYER  (nixorcist)                         │
+│     nixorcist/generated/                                 │
+│     • Machine-generated                                  │
+│     • Disposable — purge with: nixorcist purge           │
+│     • Never touches layer 1                              │
+├──────────────────────────────────────────────────────────┤
+│  3. EVALUATION LAYER  (NixOS)                            │
+│     Merges all modules into a single system graph        │
+│     • Deterministic                                      │
+│     • Ignores duplicate package declarations safely      │
+└──────────────────────────────────────────────────────────┘
 ```
-Copy them manually or use the copying script:
-```
-chmod +x copy.sh
-./copy.sh
-```
+
+> **Rule:** Nixorcist reads from layer 1 (for `status`, `trace`, `diff`)
+> but **never writes** to it. The canonical layer is yours alone.
+
 ---
 
-# Achieving the "Zen Hyprland" Setup
+### Feature Flags
 
-To replicate the intended Hyprland experience:
+`configuration.nix` opens with a `let features = { ... };` block. Every
+major system component is controlled from there:
 
-## 1. Clone the original dotfiles
+```nix
+features = {
+  hyprland       = true;              # Wayland compositor + full desktop stack
+  kernelParams   = "thinkpad";        # Boot-time hardware tuning profile
+  gpu            = "none";            # GPU driver: "amd" | "intel" | "nvidia" | "nvidia-prime" | "none"
+  kde            = true;              # Qt/KDE runtime libraries
+  steam          = true;              # Steam + GameMode
+  uwu            = true;              # NixOwOS branding overlay
+  virtualisation = true;              # Docker + VirtualBox host
+  nixorcist      = true;              # CLI package management layer
+  openssh        = true;              # SSH daemon
+  home-manager   = true;              # Declarative /home/ management
+  home-manager-users = [ "tak_1" ];   # Users managed by Home Manager
+  copilot        = true;              # GitHub Copilot CLI
+};
 ```
-git clone https://github.com/LinuxBeginnings/Hyprland-Dots
+
+Changing a flag and running `sudo nixos-smart-rebuild` is all it takes.
+No hunting through module files.
+
+#### Always-loaded modules
+
+These are imported unconditionally, regardless of any feature flag:
+
+| Module | Purpose |
+|--------|---------|
+| `hardware-configuration.nix` | Machine hardware |
+| `modules/bootloader.nix` | GRUB / systemd-boot |
+| `modules/gpu.nix` | GPU profile dispatcher |
+| `modules/sddm.nix` | Display manager |
+| `modules/locale.nix` | Timezone, locale, keyboard |
+| `modules/networking.nix` | NetworkManager, hostname |
+| `modules/users.nix` | System user accounts |
+| `modules/audio.nix` | PipeWire |
+| `modules/hardware-graphics.nix` | Mesa / VA-API |
+| `modules/keyring.nix` | GNOME Keyring |
+| `modules/environment.nix` | Session env vars |
+| `modules/zsh.nix` | Zsh shell |
+| `modules/nix-settings.nix` | Nix daemon + nixpkgs config |
+| `modules/fonts-base.nix` | Minimal font set |
+| `modules/system-packages.nix` | Package assembly hub |
+| `modules/hm-local-bootstrap.nix` | `~/.hm-local` scaffold |
+| `modules/copilot-cli.nix` | Copilot CLI (guarded internally) |
+
+#### Conditionally loaded modules
+
+| Condition | Modules loaded |
+|-----------|---------------|
+| `features.hyprland = true` | `window-managers`, `portals`, `quickshell`, `fonts`, `theme`, `overlays`, `nh`, `vm-guest-services`, `local-hardware-clock` |
+| `features.home-manager = true` | `<home-manager/nixos>`, `hm-users` |
+| `features.uwu = true` | `uwu/nixowos.nix` |
+| `features.virtualisation = true` | `virtualbox.nix` (+ Docker) |
+| `features.kde = true` | activates Qt/KDE inside `kde.nix` |
+| `features.steam = true` | activates Steam inside `gaming.nix` |
+| `features.openssh = true` | activates SSH inside `openssh.nix` |
+
+---
+
+### How Modules Interact
+
+Tak_OS modules are **share-nothing by default**. A module file declares NixOS
+options and sets `config.*` values; it never calls functions from a sibling
+module. Cross-module communication happens exclusively through the NixOS
+option system.
+
+There is one explicit shared channel: **`_module.args`**.
+
+```nix
+# configuration.nix
+_module.args = { inherit features filterPkgs; };
 ```
 
-## Documentation Index
+This injects two values into every imported module's function arguments:
 
-Core docs:
+| Name | Type | Purpose |
+|------|------|---------|
+| `features` | attrset | The full feature-flag set from the `let` block |
+| `filterPkgs` | `[pkg] → [pkg]` | Removes disabled packages from any list |
 
-- [modules/README.md](modules/README.md) - system modules structure and purpose
-- [nixorcist/README.md](nixorcist/README.md) - Nixorcist overview and usage
+A module that needs them declares them in its argument list:
 
-Nixorcist technical docs:
+```nix
+# modules/gaming.nix
+{ pkgs, features, filterPkgs, ... }:
+{
+  programs.steam.enable = features.steam;
+  environment.systemPackages = filterPkgs (with pkgs; [ gamemode mangohud ]);
+}
+```
 
-- [nixorcist/README_cli.md](nixorcist/README_cli.md)
-- [nixorcist/README_lock.md](nixorcist/README_lock.md)
-- [nixorcist/README_utils.md](nixorcist/README_utils.md)
-- [nixorcist/README_gen.md](nixorcist/README_gen.md)
-- [nixorcist/README_hub.md](nixorcist/README_hub.md)
-- [nixorcist/README_rebuild.md](nixorcist/README_rebuild.md)
+Modules that do not need these values simply omit them — they receive
+`{ config, pkgs, lib, ... }` as usual. No boilerplate required.
 
-Reference variants:
+NixOS evaluates all modules in a single pass and merges their `config`
+outputs. There is no explicit load order. The import list in
+`configuration.nix` is ordered for **human readability**, not for evaluation
+semantics — reordering it has no effect on the final system.
 
-- [nixorcist/README_CLI.md](nixorcist/README_CLI.md)
-- [nixorcist/README_LOCK.md](nixorcist/README_LOCK.md)
-- [nixorcist/README_UTILS.md](nixorcist/README_UTILS.md)
-- [nixorcist/README_GEN.md](nixorcist/README_GEN.md)
-- [nixorcist/README_HUB.md](nixorcist/README_HUB.md)
-- [nixorcist/README_REBUILD.md](nixorcist/README_REBUILD.md)
+---
 
-## Nixorcist Package Management
+### Package Filtering
 
-Nixorcist is the package orchestration layer for this project.
+Two mechanisms let you disable packages without editing every file that
+mentions them:
 
-It uses this flow:
-
-lock file -> generated modules -> hub module -> system rebuild
-
-This avoids manually editing large environment.systemPackages lists.
-
-### Command Overview
-
-Interactive flow:
+**1. `packages/disabled/disabled-packages.nix`** — managed by CLI tools:
 
 ```bash
-nixorcist transaction
+nixos-comment   <pkg>    # adds pkg to the disabled list
+nixos-uncomment <pkg>    # removes pkg from the disabled list
 ```
 
-File import flow:
+**2. `kool.disabledPackages` in `configuration.nix`** — quick inline overrides:
+
+```nix
+kool.disabledPackages = [
+  "discord"
+  "telegram-desktop"
+];
+```
+
+Both lists feed into `filterPkgs`, which every module applies when assembling
+its package list via `modules/system-packages.nix`. A package appearing in
+either list is excluded from all groups everywhere in the system.
+
+See [`packages/README.md`](packages/README.md) for the full picture.
+
+---
+
+## Quick Start
 
 ```bash
-nixorcist import <file>
+# 1. Clone the repo
+git clone https://github.com/tak0dan/Tak_OS.git /etc/nixos
+
+# 2. Review and adjust feature flags
+sudoedit /etc/nixos/configuration.nix
+
+# 3. Set your locale, hostname, and username
+sudoedit /etc/nixos/modules/locale.nix
+sudoedit /etc/nixos/modules/networking.nix
+sudoedit /etc/nixos/modules/users.nix
+
+# 4. Bootstrap nixorcist
+sudo nixorcist gen
+sudo nixorcist hub
+
+# 5. Rebuild
+sudo nixos-rebuild switch
 ```
 
-Argument wrappers routed through import:
+### Add your own packages
+
+**Inline** (works exactly like a stock NixOS system):
+
+```nix
+# in configuration.nix — already present, just fill it in
+environment.systemPackages = with pkgs; [
+  vim
+  wget
+  htop
+];
+```
+
+**Via nixorcist** (CLI-driven, reversible):
 
 ```bash
-nixorcist install <args...>      # alias: add
-nixorcist delete <args...>       # aliases: remove, uninstall, selecte
-nixorcist chant <args...>        # mixed add/remove in one command
+sudo nixorcist install firefox
+sudo nixorcist all
 ```
 
-Generation and apply:
+---
+
+## Everyday Usage
 
 ```bash
-nixorcist gen
-nixorcist hub
-nixorcist rebuild
+# Smart rebuild with automatic error resolution
+sudo nixos-smart-rebuild
+
+# Full nixorcist pipeline (gen → hub → rebuild)
+sudo nixorcist all
+
+# Check what is installed and where
+sudo nixorcist status
+
+# Find where a specific package comes from
+sudo nixorcist trace firefox
+
+# See what nixorcist manages vs what is in config
+sudo nixorcist diff
+
+# Update channels + index + rebuild
+sudo nix-channel --update && sudo nixorcist refresh-index && sudo nixos-rebuild switch
 ```
 
-All-in-one flow:
+---
+
+## Code of Conduct
+
+These rules protect the integrity and readability of the configuration.
+
+### Architecture
+
+1. **The canonical layer is the single source of truth.**
+   `configuration.nix`, `modules/`, and `packages/` are your responsibility.
+   Nixorcist may never write to these paths.
+
+2. **One concern per module.**
+   `audio.nix` handles audio. `networking.nix` handles networking.
+   Do not combine unrelated concerns in one file.
+
+3. **Modules are share-nothing.**
+   A module must never `import` a sibling module or call its functions directly.
+   All cross-module communication goes through the NixOS option system
+   or `_module.args`.
+
+4. **Package lists belong in `packages/`, not `modules/`.**
+   Modules configure services and options. The `packages/` tree defines
+   what software is installed.
+
+5. **Never edit `nixorcist/generated/` by hand.**
+   Those files are machine-owned. Manual edits will be overwritten.
+
+### Safety
+
+6. **Test before switching.**
+   Run `sudo nixos-rebuild dry-activate` before `switch` when making
+   structural changes (new modules, renamed options, changed imports).
+
+7. **Back up before deploying.**
+   `scripts/deploy-to-etc-nixos.sh` creates a backup automatically.
+   Do not skip or suppress it.
+
+8. **Do not store secrets in this repo.**
+   No passwords, API keys, or private keys — not even in comments.
+   Use `sops-nix`, `agenix`, or another secrets manager instead.
+
+9. **Hardware-specific modules stay separate.**
+   GPU drivers, kernel params, and machine-specific tuning must never be
+   merged into generic modules. Hardware specificity belongs in named files.
+
+### Style
+
+10. **Preserve the guiding comments in `configuration.nix`.**
+    The comment blocks (`# → modules/foo.nix`) are navigation aids.
+    Do not remove or shorten them when editing the file.
+
+11. **Every new module carries the attribution header:**
+
+```nix
+# ==================================================
+#  Tak_OS (2026)
+#  Project URL: https://github.com/tak0dan/Tak_OS
+#  License: GNU GPLv3
+#  SPDX-License-Identifier: GPL-3.0-or-later
+# ==================================================
+```
+
+12. **Keep commits atomic and described.**
+    One logical change per commit. Push to `main`.
+
+---
+
+## Upgrade Guide
 
 ```bash
-nixorcist all
+# 1. Update channels
+sudo nix-channel --update
+
+# 2. Refresh nixorcist package index
+sudo nixorcist refresh-index
+
+# 3. Rebuild (smart mode handles renamed options automatically)
+sudo nixos-smart-rebuild
 ```
 
-### Import/Chant +/- Parser Semantics
+If an option was renamed across NixOS releases, `nixos-smart-rebuild` detects
+it and offers an interactive replacement prompt. The rename table lives in
+`scripts/nix-rebuild-smart.sh`.
 
-The import parser supports mode switches:
+---
 
-- default mode is install
-- `+` switches to install mode
-- `-` switches to delete mode
-- switches can appear multiple times and inline
-
-Example:
-
-```bash
-nixorcist chant a b,c,d -e f,+a +f+g h + l - l
-```
-
-This resolves to:
-
-- install: a, b, c, d, a, f, g, h, l
-- remove: e, f, l
-
-Removals are applied after additions, so delete has natural final priority.
-
-### Typical Nixorcist Workflow
-
-1. Stage package changes:
-
-```bash
-nixorcist transaction
-```
-
-2. Generate package modules:
-
-```bash
-nixorcist gen
-```
-
-3. Regenerate hub:
-
-```bash
-nixorcist hub
-```
-
-4. Apply rebuild:
-
-```bash
-nixorcist rebuild
-```
-
-Or run everything:
-
-```bash
-nixorcist all
-```
-
-## Smart Rebuild Script
-
-The repository includes a rebuild helper at [scripts/nix-rebuild-smart.sh](scripts/nix-rebuild-smart.sh).
-
-It improves standard rebuild handling by:
-
-- detecting evaluation warnings
-- locating renamed options
-- offering guided replacement behavior
-- supporting interactive confirmation mode
-
-This helps keep the configuration maintainable across NixOS changes.
-
-## Notes
-
-- Prefer testing changes incrementally.
-- Keep module boundaries clear.
-- Keep generated files managed through Nixorcist flows.
-
-## License
-
-MIT
+*Tak_OS — declarative, modular, yours.*  
+*© 2026 tak0dan · GNU GPLv3 · [https://github.com/tak0dan/Tak_OS](https://github.com/tak0dan/Tak_OS)*

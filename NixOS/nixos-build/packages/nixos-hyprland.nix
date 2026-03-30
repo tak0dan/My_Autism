@@ -1,3 +1,5 @@
+# Tak_OS · nixos-hyprland.nix — NixOS Hyprland integration layer packages
+# github.com/tak0dan/Tak_OS · GNU GPLv3
 { pkgs }:
 
 with pkgs; [
@@ -5,7 +7,7 @@ with pkgs; [
   # =========================
   # Hyprland Extras
   # =========================
-  hypridle
+  # hypridle — toggled by features.hypr.idle  (see modules/system-packages.nix)
   hyprpolkitagent
   uwsm
   hyprlang
@@ -38,7 +40,7 @@ with pkgs; [
   google-chrome
   gnome-system-monitor
   gsettings-qt
-  fastfetch
+  # fastfetch — provided by modules/default-fastfetch.nix or modules/uwu/nixowos.nix
   grimblast
   gtk-engine-murrine
   inxi

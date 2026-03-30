@@ -1,6 +1,6 @@
 # ==================================================
-#  KoolDots (2026)
-#  Project URL: https://github.com/LinuxBeginnings
+#  Tak_OS (2026)
+#  Project URL: https://github.com/tak0dan/Tak_OS
 #  License: GNU GPLv3
 #  SPDX-License-Identifier: GPL-3.0-or-later
 # ==================================================
@@ -61,6 +61,34 @@
 
         ++ lib.optionals features.steam
           (filter (import ../packages/games.nix { inherit pkgs; }))
+
+        ++ lib.optionals features.uwuPackages
+          (filter (import ../packages/uwu.nix { inherit pkgs; }))
+
+        # ── Hyprland sub-feature packages ────────────────────────────────────
+        # Extracted from hyprland.nix / nixos-hyprland.nix so that each
+        # can be toggled independently via features.<name> in configuration.nix.
+        ++ lib.optionals (features.hyprland && features.hypr.lock.enable)
+          (filter [ pkgs.hyprlock ])
+
+        ++ lib.optionals (features.hyprland && features.hypr.idle)
+          (filter [ pkgs.hypridle ])
+
+        ++ lib.optionals (features.hyprland && features.hypr.bar)
+          (filter [ pkgs.waybar ])
+
+        ++ lib.optionals (features.hyprland && features.hypr.notif)
+          (filter [ pkgs.swaynotificationcenter ])
+
+        ++ lib.optionals (features.hyprland && features.hypr.logout)
+          (filter [ pkgs.wlogout ])
+
+        ++ lib.optionals (features.hyprland && features.hypr.launcher)
+          (filter [ pkgs.rofi ])
+
+        # ── GameOn packages ─────────────────────────────────────────────────
+        ++ lib.optionals features.gameon.enable
+          (import ../packages/gameon.nix { inherit pkgs features; })
 
         # Always-installed system utilities
         ++ [

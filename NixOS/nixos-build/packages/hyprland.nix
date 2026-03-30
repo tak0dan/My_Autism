@@ -1,3 +1,5 @@
+# Tak_OS · hyprland.nix — Hyprland WM specific packages (waybar, rofi, dunst, swww)
+# github.com/tak0dan/Tak_OS · GNU GPLv3
 { pkgs }:
 
 with pkgs; [
@@ -24,24 +26,24 @@ with pkgs; [
   ags        # Aylur's GTK Shell — JavaScript-powered widget system
   eww        # Elkowar's widget system (Wayland + X11)
   quickshell # QtQuick / QML-based shell and widget toolkit
-  waybar     # Highly customizable Wayland status bar
+  # waybar — toggled by features.hypr.bar  (see modules/system-packages.nix)
 
   # =========================
   # Launchers
   # =========================
-  rofi   # Application launcher (Wayland mode)
+  # rofi — toggled by features.rofi     (see modules/system-packages.nix)
   wofi   # GTK Wayland application launcher
 
   # =========================
   # Lock & Logout
   # =========================
-  hyprlock   # Hyprland GPU-based screen locker
-  wlogout    # Wayland logout / power menu
+  # hyprlock — toggled by features.hypr.lock.enable  (see modules/hyprlock.nix)
+  # wlogout  — toggled by features.wlogout          (see modules/system-packages.nix)
 
   # =========================
   # Notifications
   # =========================
-  swaynotificationcenter   # Notification center for Sway / Hyprland (swaync)
+  # swaynotificationcenter — toggled by features.hypr.notif  (see modules/system-packages.nix)
 
   # =========================
   # Wallpaper
